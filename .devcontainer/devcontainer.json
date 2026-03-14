@@ -1,15 +1,9 @@
 {
-  "name": "Inventory Management Java & Postgres",
+  "name": "Java & Postgres Codespace",
   "image": "mcr.microsoft.com/devcontainers/java:17",
   "features": {
     "ghcr.io/devcontainers/features/postgresql:1": {
-      "version": "latest",
-      "database": "inventory_db",
-      "username": "postgres",
-      "password": "password"
-    },
-    "ghcr.io/devcontainers/features/tomcat:1": {
-        "version": "10.1"
+        "version": "latest"
     }
   },
   "customizations": {
