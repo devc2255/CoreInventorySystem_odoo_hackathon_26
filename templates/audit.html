@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .panel-card { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 24px; }
+    .custom-table { width: 100%; color: #F4F4F5; font-size: 0.85rem; }
+    .custom-table th { color: #A1A1AA; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px; border-bottom: 1px solid #3F3F46; padding-bottom: 12px; font-weight: 600; }
+    .custom-table td { padding: 16px 0; border-bottom: 1px solid #3F3F46; vertical-align: middle; }
+    
+    .tag { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+    
+    /* Action Color Coding */
+    .tag-login { background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.3); color: #93C5FD; }
+    .tag-product { background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); color: #C4B5FD; }
+    .tag-receipt { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: #6EE7B7; }
+    .tag-delivery { background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); color: #FDBA74; }
+    .tag-adjust { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: #FCA5A5; }
+    .tag-general { background: rgba(161, 161, 170, 0.1); border: 1px solid rgba(161, 161, 170, 0.3); color: #D4D4D8; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 text-white fw-bold mb-0">System Audit Trail</h1>
+    <span class="badge" style="background: rgba(167, 139, 250, 0.15); color: #C4B5FD; border: 1px solid rgba(167, 139, 250, 0.3); padding: 8px 16px;">Restricted Access</span>
+</div>
+
+<div class="panel-card">
+    <h6 class="text-white fw-bold mb-4">Recent Activity Logs</h6>
+    <div class="table-responsive">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th width="15%">Timestamp</th>
+                    <th width="20%">Operator</th>
+                    <th width="20%">Action Type</th>
+                    <th width="45%">System Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td style="color: #A1A1AA;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td class="fw-bold text-white">
+                        <div class="d-flex align-items-center">
+                            <div style="width: 24px; height: 24px; border-radius: 50%; background: #3F3F46; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; margin-right: 8px;">
+                                {{ log.user.username[0] | upper }}
+                            </div>
+                            {{ log.user.username }}
+                        </div>
+                    </td>
+                    <td>
+                        {% if 'Login' in log.action or 'Logout' in log.action %}
+                            <span class="tag tag-login">{{ log.action }}</span>
+                        {% elif 'Product' in log.action %}
+                            <span class="tag tag-product">{{ log.action }}</span>
+                        {% elif 'Receipt' in log.action %}
+                            <span class="tag tag-receipt">{{ log.action }}</span>
+                        {% elif 'Delivery' in log.action %}
+                            <span class="tag tag-delivery">{{ log.action }}</span>
+                        {% elif 'Adjust' in log.action %}
+                            <span class="tag tag-adjust">{{ log.action }}</span>
+                        {% else %}
+                            <span class="tag tag-general">{{ log.action }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="color: #D4D4D8;">{{ log.details }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-5">No logs recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

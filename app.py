@@ -1,9 +1,10 @@
 import os
+import random
 from functools import wraps
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import func
 
 app = Flask(__name__)
@@ -25,6 +26,9 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default='Manager')
     address = db.Column(db.Text, nullable=True)
     preferred_payment = db.Column(db.String(20), nullable=True, default='UPI')
+    # OTP Recovery Columns
+    reset_otp = db.Column(db.String(6), nullable=True)
+    otp_expiry = db.Column(db.DateTime, nullable=True)
 
 class Location(db.Model):
     __tablename__ = 'locations'
@@ -72,9 +76,23 @@ class StockLedger(db.Model):
     quantity_change = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    action = db.Column(db.String(100), nullable=False)
+    details = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='logs')
+
 # ==========================================
-# CONTEXT PROCESSOR FOR GLOBAL NAV NOTIFICATIONS
+# HELPERS & CONTEXT PROCESSORS
 # ==========================================
+def log_action(user_id, action, details=""):
+    new_log = AuditLog(user_id=user_id, action=action, details=details)
+    db.session.add(new_log)
+    db.session.commit()
+
 @app.context_processor
 def inject_global_data():
     if 'user_id' in session:
@@ -89,12 +107,10 @@ def inject_global_data():
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
+        if 'user_id' not in session: return redirect(url_for('login'))
         user = User.query.get(session['user_id'])
         if not user:
             session.clear()
-            flash('Your session has expired. Please log in again.', 'danger')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -120,11 +136,9 @@ def signup():
         email = request.form.get('email')
         password = request.form.get('password')
         role = request.form.get('role', 'Manager')
-        
         if User.query.filter_by(email=email).first():
             flash('Email already exists. Please log in.', 'danger')
             return redirect(url_for('signup'))
-            
         hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
         new_user = User(username=name, email=email, password_hash=hashed_pw, role=role)
         db.session.add(new_user)
@@ -138,11 +152,11 @@ def login():
         email = request.form.get('email')
         password = request.form.get('password')
         user = User.query.filter_by(email=email).first()
-        
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
             session['user_name'] = user.username
             session['user_role'] = user.role
+            log_action(user.id, "System Login", f"Authenticated successfully via {email}")
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid email or password.', 'danger')
@@ -150,9 +164,81 @@ def login():
 
 @app.route('/logout')
 def logout():
+    if 'user_id' in session:
+        log_action(session['user_id'], "System Logout", "User ended session manually.")
     session.clear()
     return redirect(url_for('login'))
 
+# --- OTP RECOVERY ROUTES ---
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        user = User.query.filter_by(email=email).first()
+        
+        if user:
+            otp = str(random.randint(100000, 999999))
+            user.reset_otp = otp
+            user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+            db.session.commit()
+            
+            # Print to terminal to act as our "Email Server"
+            print(f"\n========== 📧 SYSTEM EMAIL OUTBOX ==========")
+            print(f"To: {email}")
+            print(f"Subject: Password Reset Request")
+            print(f"Your secure OTP is: {otp}")
+            print(f"============================================\n")
+            
+            flash(f'Demo Mode: An OTP ({otp}) has been sent to your email.', 'info')
+            session['reset_email'] = email
+            return redirect(url_for('verify_otp'))
+        else:
+            flash('If that email is registered, an OTP has been sent.', 'info')
+            
+    return render_template('forgot_password.html')
+
+@app.route('/verify-otp', methods=['GET', 'POST'])
+def verify_otp():
+    if 'reset_email' not in session: return redirect(url_for('forgot_password'))
+        
+    if request.method == 'POST':
+        otp_entered = request.form.get('otp')
+        user = User.query.filter_by(email=session['reset_email']).first()
+        
+        if user and user.reset_otp == otp_entered:
+            if datetime.utcnow() > user.otp_expiry:
+                flash('OTP has expired. Please request a new one.', 'danger')
+                return redirect(url_for('forgot_password'))
+            session['otp_verified'] = True
+            return redirect(url_for('reset_password'))
+        else:
+            flash('Invalid OTP. Please check your email and try again.', 'danger')
+            
+    return render_template('verify_otp.html')
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if not session.get('otp_verified') or 'reset_email' not in session:
+        return redirect(url_for('login'))
+        
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        user = User.query.filter_by(email=session['reset_email']).first()
+        
+        if user:
+            user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
+            user.reset_otp = None
+            user.otp_expiry = None
+            db.session.commit()
+            log_action(user.id, "Password Recovered", "User reset password via OTP verification.")
+            session.pop('reset_email', None)
+            session.pop('otp_verified', None)
+            flash('Password reset successfully! You can now log in.', 'success')
+            return redirect(url_for('login'))
+            
+    return render_template('reset_password.html')
+
+# --- MAIN APP ROUTES ---
 @app.route('/')
 def index():
     return redirect(url_for('dashboard'))
@@ -195,6 +281,7 @@ def products():
         new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom)
         db.session.add(new_product)
         db.session.commit()
+        log_action(session['user_id'], "Product Created", f"Added '{name}' (SKU: {sku}) to catalog.")
         flash(f'Success: Product "{name}" added.', 'success')
         return redirect(url_for('products'))
     products_list = db.session.query(Product.id, Product.name, Product.sku, Product.unit_of_measure, ProductCategory.name.label('category_name')).outerjoin(ProductCategory, Product.category_id == ProductCategory.id).all()
@@ -211,6 +298,7 @@ def locations():
         new_loc = Location(name=name, type=loc_type)
         db.session.add(new_loc)
         db.session.commit()
+        log_action(session['user_id'], "Location Created", f"Added new {loc_type}: '{name}'.")
         flash(f'Success: {loc_type} "{name}" added to network.', 'success')
         return redirect(url_for('locations'))
     locations_list = Location.query.all()
@@ -252,9 +340,17 @@ def profile():
         user.preferred_payment = request.form.get('preferred_payment')
         db.session.commit()
         session['user_name'] = user.username
+        log_action(session['user_id'], "Profile Updated", "User updated personal or billing details.")
         flash('Profile updated.', 'success')
         return redirect(url_for('profile'))
     return render_template('profile.html', user=user)
+
+@app.route('/audit')
+@login_required
+@role_required('Manager')
+def audit_logs():
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+    return render_template('audit.html', logs=logs)
 
 # ==========================================
 # API ENDPOINTS 
@@ -262,8 +358,12 @@ def profile():
 @app.route('/api/seed', methods=['POST'])
 def seed_data():
     if User.query.first(): return jsonify({"message": "Data exists!"}), 200
+    
+    admin = User(username="Admin Manager", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager")
+    staff = User(username="Warehouse Staff", email="staff@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Warehouse_Staff")
+    
     db.session.add_all([
-        User(username="Admin Manager", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager"),
+        admin, staff,
         Location(name="Steel Supplier Inc.", type="Vendor"),
         Location(name="Main Warehouse", type="Internal"),
         Location(name="Acme Manufacturing", type="Customer"),
@@ -285,6 +385,7 @@ def process_receipt():
         db.session.add(OperationLine(operation_id=op.id, product_id=item['product_id'], quantity=item['quantity']))
         db.session.add(StockLedger(product_id=item['product_id'], location_id=data['warehouse_id'], operation_id=op.id, quantity_change=item['quantity']))
     db.session.commit()
+    log_action(data['user_id'], "Receipt Processed", f"Processed REC-{op.id} at warehouse ID {data['warehouse_id']}.")
     return jsonify({"message": "Receipt validated!"}), 201
 
 @app.route('/api/deliveries', methods=['POST'])
@@ -297,6 +398,7 @@ def process_delivery():
         db.session.add(OperationLine(operation_id=op.id, product_id=item['product_id'], quantity=item['quantity']))
         db.session.add(StockLedger(product_id=item['product_id'], location_id=data['warehouse_id'], operation_id=op.id, quantity_change=-float(item['quantity'])))
     db.session.commit()
+    log_action(data['user_id'], "Delivery Processed", f"Processed DEL-{op.id} to customer ID {data['customer_id']}.")
     return jsonify({"message": "Delivery validated!"}), 201
 
 @app.route('/api/adjustments', methods=['POST'])
@@ -313,6 +415,7 @@ def process_adjustment():
     db.session.add(OperationLine(operation_id=op.id, product_id=product_id, quantity=abs(diff)))
     db.session.add(StockLedger(product_id=product_id, location_id=warehouse_id, operation_id=op.id, quantity_change=diff))
     db.session.commit()
+    log_action(data['user_id'], "Stock Adjusted", f"Adjusted ADJ-{op.id} for Product {product_id} by {diff} units.")
     return jsonify({"message": "Adjustment successful."}), 201
 
 if __name__ == '__main__':
