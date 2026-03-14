@@ -353,6 +353,32 @@ def audit_logs():
     return render_template('audit.html', logs=logs)
 
 # ==========================================
+# GLOBAL ERROR HANDLING (UI PRESERVED)
+# ==========================================
+@app.errorhandler(404)
+def not_found_error(error):
+    flash("404 Error: The page you are looking for does not exist.", "warning")
+    return redirect(url_for('dashboard'))
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback() 
+    flash("500 Error: An internal server error occurred. Please try again later.", "danger")
+    return redirect(url_for('dashboard'))
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(e):
+    db.session.rollback() # Protects database from locking up
+    
+    # If a JS API call fails, send a clean JSON response
+    if request.path.startswith('/api/'):
+        return jsonify({"message": "A system error occurred. Please check your inputs."}), 500
+    
+    # If a standard page load fails, redirect cleanly with an alert
+    flash("System Alert: An unexpected error was safely caught and resolved.", "danger")
+    return redirect(url_for('dashboard'))
+
+# ==========================================
 # API ENDPOINTS 
 # ==========================================
 @app.route('/api/seed', methods=['POST'])
