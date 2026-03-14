@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .panel-card { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 24px; }
+    .dark-input { background-color: #18181B; border: 1px solid #3F3F46; color: #F4F4F5; border-radius: 8px; padding: 10px 14px; transition: all 0.2s; }
+    .dark-input:focus { border-color: #A78BFA; box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2); outline: none; }
+    .custom-table { width: 100%; color: #F4F4F5; font-size: 0.9rem; }
+    .custom-table th { color: #A1A1AA; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-bottom: 1px solid #3F3F46; padding-bottom: 12px; font-weight: 600; }
+    .custom-table td { padding: 16px 0; border-bottom: 1px solid #3F3F46; vertical-align: middle; }
+    .btn-purple { background-color: #6D28D9; color: white; border: none; border-radius: 8px; padding: 10px 24px; font-weight: 600; transition: all 0.2s; }
+    .btn-purple:hover { background-color: #5B21B6; }
+    .tag { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+    .tag-Internal { background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); color: #C4B5FD; }
+    .tag-Vendor { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: #6EE7B7; }
+    .tag-Customer { background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.3); color: #93C5FD; }
+    .tag-loss { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: #FCA5A5; }
+    .text-muted-custom { color: #A1A1AA; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 text-white fw-bold mb-0">Locations & Partners</h1>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="panel-card h-100">
+            <h6 class="text-white fw-bold mb-4">Register New Location</h6>
+            <form method="POST" action="/locations">
+                <div class="mb-3">
+                    <label class="form-label text-muted-custom">Location / Partner Name</label>
+                    <input type="text" name="name" class="form-control dark-input" required>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label text-muted-custom">Network Type</label>
+                    <select name="type" class="form-select dark-input" required>
+                        <option value="Internal">Internal Warehouse</option>
+                        <option value="Vendor">Supplier / Vendor</option>
+                        <option value="Customer">Client / Customer</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-purple w-100">+ Add to Network</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="panel-card h-100">
+            <h6 class="text-white fw-bold mb-4">Current Network Map</h6>
+            <div class="table-responsive">
+                <table class="custom-table">
+                    <thead><tr><th>ID</th><th>Location Name</th><th class="text-end">Classification</th></tr></thead>
+                    <tbody>
+                        {% for loc in locations %}
+                        <tr>
+                            <td class="text-muted-custom">LOC-0{{ loc.id }}</td>
+                            <td class="fw-bold text-white">{{ loc.name }}</td>
+                            <td class="text-end">
+                                {% if loc.type == 'Inventory Loss' %}<span class="tag tag-loss">Virtual / System</span>
+                                {% else %}<span class="tag tag-{{ loc.type }}">{{ loc.type }}</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center text-muted py-4">No locations found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

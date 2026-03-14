@@ -2,53 +2,50 @@
 
 {% block content %}
 <style>
-    .dark-input { background-color: var(--bg-dark); border: 1px solid var(--border-dark); color: var(--text-primary); }
-    .dark-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); color: white; }
+    .panel-card { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 32px; }
+    .dark-input { background-color: #18181B; border: 1px solid #3F3F46; color: #F4F4F5; border-radius: 8px; padding: 12px 16px; transition: all 0.2s; }
+    .dark-input:focus { border-color: #A78BFA; box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2); outline: none; }
+    .btn-purple { background-color: #6D28D9; color: white; border: none; border-radius: 8px; padding: 12px; font-weight: 600; transition: all 0.2s; width: 100%; }
+    .btn-purple:hover { background-color: #5B21B6; }
+    .text-muted-custom { color: #A1A1AA; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
 </style>
 
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
-    <h1 class="h2 text-light fw-bold">Stock Adjustments</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 text-white fw-bold mb-0">Stock Adjustments</h1>
 </div>
 
 <div class="row justify-content-center">
     <div class="col-md-8">
-        <div class="card shadow-sm border-0 mb-4" style="background-color: var(--surface-dark);">
-            <div class="card-body p-4">
-                <div id="statusMessage" class="alert d-none" role="alert"></div>
+        <div class="panel-card mb-4">
+            <div id="statusMessage" class="alert d-none" role="alert"></div>
+            <form id="adjustmentForm">
+                <input type="hidden" id="userId" value="{{ session.get('user_id') }}">
+                <h6 class="text-white fw-bold mb-4">Physical Inventory Count</h6>
+                
+                <div class="mb-4">
+                    <label class="form-label text-muted-custom">Warehouse / Location</label>
+                    <select id="warehouseId" class="form-select dark-input" required>
+                        <option value="" disabled selected>Select Location...</option>
+                        {% for warehouse in warehouses %}<option value="{{ warehouse.id }}">{{ warehouse.name }}</option>{% endfor %}
+                    </select>
+                </div>
 
-                <form id="adjustmentForm">
-                    <input type="hidden" id="userId" value="{{ session.get('user_id') }}">
-                    <h5 class="text-light mb-4">Physical Inventory Count</h5>
-                    
-                    <div class="mb-3">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Warehouse / Location</label>
-                        <select id="warehouseId" class="form-select dark-input" required>
-                            <option value="" disabled selected>Select Location...</option>
-                            {% for warehouse in warehouses %}
-                                <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                <div class="mb-4">
+                    <label class="form-label text-muted-custom">Product to Adjust</label>
+                    <select id="productId" class="form-select dark-input" required>
+                        <option value="" disabled selected>Select Product...</option>
+                        {% for product in products %}<option value="{{ product.id }}">[{{ product.sku }}] {{ product.name }}</option>{% endfor %}
+                    </select>
+                </div>
 
-                    <div class="mb-3">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Product to Adjust</label>
-                        <select id="productId" class="form-select dark-input" required>
-                            <option value="" disabled selected>Select Product...</option>
-                            {% for product in products %}
-                                <option value="{{ product.id }}">[{{ product.sku }}] {{ product.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                <div class="mb-5">
+                    <label class="form-label text-muted-custom">Actual Counted Quantity</label>
+                    <input type="number" step="0.01" min="0" id="countedQuantity" class="form-control dark-input form-control-lg" placeholder="0.00" required>
+                    <small style="color: #A1A1AA; font-size: 0.8rem; margin-top: 8px; display: block;">The system will calculate the delta and log the adjustment.</small>
+                </div>
 
-                    <div class="mb-4">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Actual Counted Quantity</label>
-                        <input type="number" step="0.01" min="0" id="countedQuantity" class="form-control dark-input form-control-lg" placeholder="0.00" required>
-                        <small class="text-muted">The system will automatically calculate the difference and log the adjustment.</small>
-                    </div>
-
-                    <button type="button" class="btn btn-warning w-100 py-2 fw-bold" onclick="submitAdjustment()">Process Adjustment</button>
-                </form>
-            </div>
+                <button type="button" class="btn-purple" onclick="submitAdjustment()">Process Adjustment</button>
+            </form>
         </div>
     </div>
 </div>
@@ -60,20 +57,14 @@
         const countedQty = document.getElementById('countedQuantity').value;
 
         if (!warehouseId || !productId || countedQty === '') {
-            showStatus('All fields are required.', 'warning');
-            return;
+            showStatus('All fields are required.', 'warning'); return;
         }
 
         try {
             const response = await fetch('/api/adjustments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    warehouse_id: parseInt(warehouseId),
-                    product_id: parseInt(productId),
-                    counted_quantity: parseFloat(countedQty),
-                    user_id: parseInt(document.getElementById('userId').value)
-                })
+                body: JSON.stringify({ warehouse_id: parseInt(warehouseId), product_id: parseInt(productId), counted_quantity: parseFloat(countedQty), user_id: parseInt(document.getElementById('userId').value) })
             });
             const result = await response.json();
             if (response.ok) {
@@ -85,9 +76,8 @@
 
     function showStatus(msg, type) {
         const box = document.getElementById('statusMessage');
-        box.className = `alert alert-${type} border-0 bg-${type} bg-opacity-10 text-${type}`;
-        box.textContent = msg;
-        box.classList.remove('d-none');
+        box.style.cssText = type === 'success' ? "background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: #6EE7B7;" : "background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: #FCA5A5;";
+        box.className = `alert`; box.textContent = msg; box.classList.remove('d-none');
         setTimeout(() => box.classList.add('d-none'), 5000);
     }
 </script>

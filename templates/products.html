@@ -2,133 +2,68 @@
 
 {% block content %}
 <style>
-    /* Custom Dark Table Styling */
-    .table-dark-custom { color: var(--text-primary); margin-bottom: 0; }
-    .table-dark-custom th { 
-        background-color: rgba(255,255,255,0.02); 
-        border-bottom: 2px solid var(--border-dark); 
-        color: var(--text-muted); 
-        font-weight: 600; 
-        text-transform: uppercase; 
-        font-size: 0.75rem; 
-        letter-spacing: 1px; 
-        padding: 1rem;
-    }
-    .table-dark-custom td { 
-        border-bottom: 1px solid var(--border-dark); 
-        vertical-align: middle; 
-        padding: 1rem;
-        background-color: transparent;
-    }
-    .table-dark-custom tbody tr { transition: background-color 0.2s; }
-    .table-dark-custom tbody tr:hover { background-color: rgba(59, 130, 246, 0.05); }
-    
-    /* Dark Modal Styling */
-    .modal-content.dark-theme {
-        background-color: var(--surface-dark);
-        border: 1px solid var(--border-dark);
-        color: var(--text-primary);
-    }
-    .modal-header.dark-theme { border-bottom: 1px solid var(--border-dark); }
-    .modal-footer.dark-theme { border-top: 1px solid var(--border-dark); }
-    .form-control.dark-input, .form-select.dark-input {
-        background-color: var(--bg-dark);
-        border: 1px solid var(--border-dark);
-        color: var(--text-primary);
-    }
-    .form-control.dark-input:focus, .form-select.dark-input:focus {
-        border-color: var(--accent-blue);
-        box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
-    }
+    .panel-card { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 24px; }
+    .dark-input { background-color: #18181B; border: 1px solid #3F3F46; color: #F4F4F5; border-radius: 8px; padding: 10px 14px; transition: all 0.2s; }
+    .dark-input:focus { border-color: #A78BFA; box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2); outline: none; }
+    .custom-table { width: 100%; color: #F4F4F5; font-size: 0.9rem; }
+    .custom-table th { color: #A1A1AA; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-bottom: 1px solid #3F3F46; padding-bottom: 12px; font-weight: 600; }
+    .custom-table td { padding: 16px 0; border-bottom: 1px solid #3F3F46; vertical-align: middle; }
+    .btn-purple { background-color: #6D28D9; color: white; border: none; border-radius: 8px; padding: 10px 24px; font-weight: 600; transition: all 0.2s; }
+    .btn-purple:hover { background-color: #5B21B6; }
+    .text-muted-custom { color: #A1A1AA; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
 </style>
 
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
-    <h1 class="h2 text-light fw-bold">Products Catalog</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <button type="button" class="btn btn-primary fw-bold px-4" data-bs-toggle="modal" data-bs-target="#addProductModal">
-            + Add New Product
-        </button>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 text-white fw-bold mb-0">Products Catalog</h1>
 </div>
 
-<div class="card shadow-sm border-0">
-    <div class="table-responsive">
-        <table class="table table-dark-custom w-100">
-            <thead>
-                <tr>
-                    <th>SKU Code</th>
-                    <th>Product Name</th>
-                    <th>Category</th>
-                    <th>Unit of Measure</th>
-                    <th class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for product in products %}
-                <tr>
-                    <td><span class="badge bg-secondary bg-opacity-25 text-light border border-secondary">{{ product.sku }}</span></td>
-                    <td class="fw-semibold">{{ product.name }}</td>
-                    <td>{{ product.category_name or 'Uncategorized' }}</td>
-                    <td>{{ product.unit_of_measure }}</td>
-                    <td class="text-end">
-                        <button class="btn btn-sm btn-outline-info me-1">Edit</button>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5" class="text-center py-5 text-muted">
-                        No products found in the catalog. Click "Add New Product" to initialize your inventory.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="modal fade" id="addProductModal" tabindex="-1" aria-labelledby="addProductModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content dark-theme shadow-lg">
-            <div class="modal-header dark-theme">
-                <h5 class="modal-title fw-bold" id="addProductModalLabel">Register New Product</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="panel-card h-100">
+            <h6 class="text-white fw-bold mb-4">Register New Product</h6>
             <form method="POST" action="/products">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Product Name</label>
-                        <input type="text" name="name" class="form-control dark-input" required placeholder="e.g., Titanium Screws">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label text-muted small text-uppercase fw-bold">SKU Code</label>
-                            <input type="text" name="sku" class="form-control dark-input" required placeholder="e.g., TS-001">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label text-muted small text-uppercase fw-bold">Unit of Measure</label>
-                            <select name="uom" class="form-select dark-input" required>
-                                <option value="Units">Units</option>
-                                <option value="kg">Kilograms (kg)</option>
-                                <option value="Liters">Liters (L)</option>
-                                <option value="Boxes">Boxes</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Category</label>
-                        <select name="category_id" class="form-select dark-input" required>
-                            <option value="" disabled selected>Select a category...</option>
-                            {% for category in categories %}
-                                <option value="{{ category.id }}">{{ category.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted-custom">Product Name</label>
+                    <input type="text" name="name" class="form-control dark-input" required>
                 </div>
-                <div class="modal-footer dark-theme">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4">Save Product</button>
+                <div class="mb-3">
+                    <label class="form-label text-muted-custom">SKU / Barcode</label>
+                    <input type="text" name="sku" class="form-control dark-input" required>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted-custom">Category</label>
+                    <select name="category_id" class="form-select dark-input" required>
+                        {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label text-muted-custom">Unit of Measure</label>
+                    <input type="text" name="uom" class="form-control dark-input" required placeholder="e.g. kg, pcs">
+                </div>
+                <button type="submit" class="btn-purple w-100">+ Add Product</button>
             </form>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="panel-card h-100">
+            <h6 class="text-white fw-bold mb-4">Catalog Overview</h6>
+            <div class="table-responsive">
+                <table class="custom-table">
+                    <thead><tr><th>SKU</th><th>Product Name</th><th>Category</th><th class="text-end">UoM</th></tr></thead>
+                    <tbody>
+                        {% for p in products %}
+                        <tr>
+                            <td class="text-muted-custom">{{ p.sku }}</td>
+                            <td class="fw-bold text-white">{{ p.name }}</td>
+                            <td>{{ p.category_name }}</td>
+                            <td class="text-end">{{ p.unit_of_measure }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-4">No products found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>

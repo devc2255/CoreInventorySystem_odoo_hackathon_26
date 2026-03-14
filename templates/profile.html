@@ -2,108 +2,83 @@
 
 {% block content %}
 <style>
-    /* Smooth transitions for our input fields */
-    .dark-input { background-color: var(--bg-dark); border: 1px solid var(--border-dark); color: var(--text-primary); transition: all 0.3s; }
-    .dark-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); color: white; }
-    
-    /* When fields are "locked" (readonly), make them look like plain saved text */
-    .dark-input[readonly], .dark-input[disabled] { 
-        background-color: transparent; 
-        border-color: transparent; 
-        padding-left: 0; 
-        color: var(--text-muted); 
-        pointer-events: none; 
-        resize: none;
-    }
-    
-    .profile-avatar { width: 80px; height: 80px; background-color: rgba(59, 130, 246, 0.1); color: var(--accent-blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold; margin-bottom: 1rem; border: 2px solid var(--accent-blue); }
+    .panel-card { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 24px; }
+    .dark-input { background-color: #18181B; border: 1px solid #3F3F46; color: #F4F4F5; border-radius: 8px; padding: 10px 14px; transition: all 0.2s; }
+    .dark-input:focus { border-color: #A78BFA; box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2); outline: none; }
+    .dark-input[readonly], .dark-input[disabled] { background-color: transparent; border-color: transparent; padding-left: 0; color: #A1A1AA; pointer-events: none; resize: none; }
+    .profile-avatar { width: 80px; height: 80px; background-color: rgba(167, 139, 250, 0.15); color: #C4B5FD; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold; margin-bottom: 1rem; border: 2px solid #6D28D9; }
+    .btn-purple { background-color: #6D28D9; color: white; border: none; border-radius: 8px; padding: 10px 24px; font-weight: 600; transition: all 0.2s; }
+    .btn-purple:hover { background-color: #5B21B6; }
+    .btn-outline-purple { background: transparent; border: 1px solid #4C1D95; color: #A78BFA; border-radius: 8px; padding: 8px 16px; font-size: 0.9rem; font-weight: 600; }
+    .btn-outline-purple:hover { background: rgba(76, 29, 149, 0.2); }
+    .text-muted-custom { color: #A1A1AA; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
 </style>
 
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
-    <h1 class="h2 text-light fw-bold">System Profile</h1>
-    <button type="button" class="btn btn-outline-info fw-bold" id="editBtn" onclick="enableEditMode()">
-        ✏️ Edit Profile
-    </button>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 text-white fw-bold mb-0">System Profile</h1>
+    <button type="button" class="btn-outline-purple" id="editBtn" onclick="enableEditMode()">✏️ Edit Profile</button>
 </div>
 
-<div class="row">
-    <div class="col-md-4 mb-4">
-        <div class="card shadow-sm border-0 h-100" style="background-color: var(--surface-dark);">
-            <div class="card-body text-center p-4">
-                <div class="d-flex justify-content-center">
-                    <div class="profile-avatar">
-                        {{ user.username[0] | upper }}
-                    </div>
-                </div>
-                <h4 class="text-light fw-bold">{{ user.username }}</h4>
-                <p class="text-muted mb-1">{{ user.email }}</p>
-                <span class="badge bg-primary bg-opacity-25 text-primary border border-primary mt-2 px-3 py-2">{{ user.role }}</span>
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="panel-card h-100 text-center">
+            <div class="d-flex justify-content-center">
+                <div class="profile-avatar">{{ user.username[0] | upper }}</div>
             </div>
+            <h5 class="text-white fw-bold mt-2">{{ user.username }}</h5>
+            <p style="color: #A1A1AA; font-size: 0.9rem;">{{ user.email }}</p>
+            <span class="badge" style="background: rgba(167, 139, 250, 0.15); color: #C4B5FD; border: 1px solid rgba(167, 139, 250, 0.3); padding: 6px 12px; border-radius: 12px;">{{ user.role }}</span>
         </div>
     </div>
 
-    <div class="col-md-8 mb-4">
-        <div class="card shadow-sm border-0" style="background-color: var(--surface-dark);">
-            <div class="card-body p-4">
-                <form method="POST" action="/profile" id="profileForm">
-                    
-                    <h5 class="text-light mb-3 border-bottom border-secondary pb-2">Account Details</h5>
-                    <div class="row mb-3">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label text-muted small text-uppercase fw-bold">Full Name</label>
-                            <input type="text" name="name" class="form-control dark-input editable-field" value="{{ user.username }}" readonly required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label text-muted small text-uppercase fw-bold">Email Address</label>
-                            <input type="email" name="email" class="form-control dark-input editable-field" value="{{ user.email }}" readonly required>
-                        </div>
+    <div class="col-md-8">
+        <div class="panel-card">
+            <form method="POST" action="/profile" id="profileForm">
+                <h6 class="text-white fw-bold mb-3 pb-3" style="border-bottom: 1px solid #3F3F46;">Account Details</h6>
+                <div class="row mb-3">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-muted-custom">Full Name</label>
+                        <input type="text" name="name" class="form-control dark-input editable-field" value="{{ user.username }}" readonly required>
                     </div>
-                    
-                    <div class="mb-4 d-none" id="passwordBlock">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Update Password</label>
-                        <input type="password" name="password" class="form-control dark-input" placeholder="Leave blank to keep current password">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label text-muted-custom">Email Address</label>
+                        <input type="email" name="email" class="form-control dark-input editable-field" value="{{ user.email }}" readonly required>
                     </div>
+                </div>
+                
+                <div class="mb-4 d-none" id="passwordBlock">
+                    <label class="form-label text-muted-custom">Update Password</label>
+                    <input type="password" name="password" class="form-control dark-input" placeholder="Leave blank to keep current">
+                </div>
 
-                    <h5 class="text-light mb-3 mt-4 border-bottom border-secondary pb-2">Billing & Shipping</h5>
-                    <div class="mb-3">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Saved Shipping Address</label>
-                        <textarea name="address" class="form-control dark-input editable-field" rows="3" readonly placeholder="No address saved yet.">{{ user.address or '' }}</textarea>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label text-muted small text-uppercase fw-bold">Default Payment Method</label>
-                        <select name="preferred_payment" class="form-select dark-input editable-field" disabled>
-                            <option value="UPI" {% if user.preferred_payment == 'UPI' %}selected{% endif %}>UPI (Unified Payments Interface)</option>
-                            <option value="COD" {% if user.preferred_payment == 'COD' %}selected{% endif %}>Cash on Delivery (COD)</option>
-                        </select>
-                    </div>
+                <h6 class="text-white fw-bold mb-3 mt-5 pb-3" style="border-bottom: 1px solid #3F3F46;">Billing & Shipping</h6>
+                <div class="mb-4">
+                    <label class="form-label text-muted-custom">Saved Address</label>
+                    <textarea name="address" class="form-control dark-input editable-field" rows="3" readonly placeholder="No address saved.">{{ user.address or '' }}</textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label text-muted-custom">Default Payment Method</label>
+                    <select name="preferred_payment" class="form-select dark-input editable-field" disabled>
+                        <option value="UPI" {% if user.preferred_payment == 'UPI' %}selected{% endif %}>UPI</option>
+                        <option value="COD" {% if user.preferred_payment == 'COD' %}selected{% endif %}>Cash on Delivery</option>
+                    </select>
+                </div>
 
-                    <div class="d-flex justify-content-end mt-4 pt-3 border-top border-secondary d-none" id="saveBlock">
-                        <button type="button" class="btn btn-outline-secondary me-2" onclick="location.reload()">Cancel</button>
-                        <button type="submit" class="btn btn-primary px-5 py-2 fw-bold">Save Updates</button>
-                    </div>
-                </form>
-            </div>
+                <div class="d-flex justify-content-end mt-4 pt-4 d-none" id="saveBlock" style="border-top: 1px solid #3F3F46;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-3" style="border-radius: 8px; color: #A1A1AA;" onclick="location.reload()">Cancel</button>
+                    <button type="submit" class="btn-purple">Save Updates</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
 <script>
-    // This function unlocks the form so the user can edit their address and details
     function enableEditMode() {
-        // 1. Remove readonly/disabled locks from fields
-        document.querySelectorAll('.editable-field').forEach(field => {
-            field.removeAttribute('readonly');
-            field.removeAttribute('disabled');
-        });
-        
-        // 2. Reveal the Password input and the Save button
+        document.querySelectorAll('.editable-field').forEach(field => { field.removeAttribute('readonly'); field.removeAttribute('disabled'); });
         document.getElementById('passwordBlock').classList.remove('d-none');
         document.getElementById('saveBlock').classList.remove('d-none');
-        
-        // 3. Hide the top "Edit Profile" button
         document.getElementById('editBtn').classList.add('d-none');
-        
-        // 4. Automatically focus the cursor on the shipping address box
         document.querySelector('textarea[name="address"]').focus();
     }
 </script>

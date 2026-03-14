@@ -1,88 +1,157 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
-    <h1 class="h2 text-light fw-bold">Inventory Dashboard</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        
-        {% if session.get('user_role') == 'Manager' %}
-            <a href="/products" class="btn btn-sm btn-outline-info me-3 d-none d-md-inline-block">+ Manage Products</a>
-        {% else %}
-            <a href="/receipts" class="btn btn-sm btn-outline-success me-3 d-none d-md-inline-block">Process Incoming</a>
-        {% endif %}
-        
-        <select class="form-select form-select-sm me-2 bg-dark text-light border-secondary shadow-sm">
-            <option>All Warehouses</option>
-            <option>Main Warehouse</option>
-        </select>
-        <select class="form-select form-select-sm bg-dark text-light border-secondary shadow-sm">
-            <option>All Document Types</option>
-            <option>Receipts</option>
-            <option>Deliveries</option>
-        </select>
+<style>
+    .kpi-card-ui { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 16px; transition: transform 0.2s, box-shadow 0.2s; }
+    .kpi-card-ui:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+    .kpi-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; margin-bottom: 16px; }
+    
+    .icon-purple { background-color: rgba(167, 139, 250, 0.15); color: #C4B5FD; }
+    .icon-red { background-color: rgba(248, 113, 113, 0.15); color: #FCA5A5; }
+    .icon-green { background-color: rgba(52, 211, 153, 0.15); color: #6EE7B7; }
+    .icon-orange { background-color: rgba(251, 146, 60, 0.15); color: #FDBA74; }
+    .kpi-link { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; text-decoration: none; border-top: 1px solid #3F3F46; padding-top: 12px; margin-top: 16px; transition: opacity 0.2s; }
+    
+    .panel-card { background-color: #27272A; border: 1px solid #3F3F46; border-radius: 12px; padding: 20px; }
+    .custom-table { width: 100%; color: #F4F4F5; font-size: 0.85rem; }
+    .custom-table th { color: #A1A1AA; text-transform: uppercase; font-size: 0.7rem; border-bottom: 1px solid #3F3F46; padding-bottom: 12px; font-weight: 600; }
+    .custom-table td { padding: 16px 0; border-bottom: 1px solid #3F3F46; vertical-align: middle; }
+    
+    .tag { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+    .tag-Receipt { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: #6EE7B7; }
+    .tag-Delivery { background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); color: #FDBA74; }
+    .tag-Adjustment { background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); color: #C4B5FD; }
+    
+    .status-Done { background: rgba(52, 211, 153, 0.1); color: #34D399; border: 1px solid rgba(52, 211, 153, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;}
+    .status-Pending { border: 1px solid #FBBF24; color: #FBBF24; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;}
+
+    .stock-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #3F3F46; padding: 16px 0; }
+    .stock-indicator { height: 2px; border-radius: 2px; margin-top: 4px; background-color: #F87171;}
+    .btn-receipt { background: transparent; border: 1px solid #52525B; color: #F4F4F5; border-radius: 8px; padding: 6px 16px; font-size: 0.85rem; cursor: pointer; }
+    .select-minimal { background-color: #3F3F46; color: white; border: none; border-radius: 6px; padding: 4px 12px; font-size: 0.85rem; outline: none; }
+    .hero-banner { background: #EFE8FF; color: #4C1D95; border-radius: 12px; padding: 24px; }
+    .hero-icon-wrapper { width: 40px; height: 40px; border-radius: 50%; background-color: #6D28D9; color: white; display: flex; align-items: center; justify-content: center; }
+    .btn-hero { background-color: transparent; border: 1px solid rgba(76, 29, 149, 0.2); color: #4C1D95; border-radius: 8px; padding: 6px 16px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; cursor: pointer; }
+    .btn-hero:hover { background-color: rgba(76, 29, 149, 0.1); }
+</style>
+
+<div class="hero-banner mb-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+    <div class="d-flex align-items-center mb-3 mb-md-0">
+        <div class="hero-icon-wrapper me-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        </div>
+        <div>
+            <h5 class="mb-1 fw-bold">Good morning, {{ session.get('user_name', 'User').split()[0] }}</h5>
+            <p class="mb-0" style="font-size: 0.9rem; color: #5B21B6;">{{ pending_receipts }} receipts to validate · {{ pending_deliveries }} deliveries pending · {{ low_stock }} low stock</p>
+        </div>
+    </div>
+    <div class="d-flex">
+        <button class="btn-hero me-2" onclick="window.location.href='/deliveries'">View deliveries</button>
+        <button class="btn-hero" onclick="window.location.href='/receipts'">Validate receipts</button>
     </div>
 </div>
 
-<div class="row g-4">
+<div class="row g-3 mb-4">
     <div class="col-md-3">
-        <div class="card kpi-card h-100" style="--accent-color: #3b82f6;">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-0">Total Products</h6>
-                    <span class="fs-4">📦</span>
-                </div>
-                <h2 class="mb-0 fw-bold text-light">{{ total_products }}</h2>
-            </div>
+        <div class="kpi-card-ui h-100">
+            <div class="kpi-icon icon-purple"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+            <h2 class="mb-0 fw-bold text-white">{{ total_completed }}</h2>
+            <small class="fw-semibold" style="color: #A1A1AA;">Total Completed Orders</small>
+            <a href="#" class="kpi-link" style="color: #A78BFA;">All time <span>→</span></a>
         </div>
     </div>
-    
     <div class="col-md-3">
-        <div class="card kpi-card h-100" style="--accent-color: #ef4444;">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-0">Low / Out of Stock</h6>
-                    <span class="fs-4">⚠️</span>
-                </div>
-                <h2 class="mb-0 fw-bold text-light">{{ low_stock }}</h2>
-            </div>
+        <div class="kpi-card-ui h-100">
+            <div class="kpi-icon icon-red"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg></div>
+            <h2 class="mb-0 fw-bold" style="color: #F87171;">{{ low_stock }}</h2>
+            <small class="text-white fw-semibold">Low / out of stock</small>
+            <a href="/receipts" class="kpi-link" style="color: #F87171;">Fix now <span>→</span></a>
         </div>
     </div>
-    
     <div class="col-md-3">
-        <div class="card kpi-card h-100" style="--accent-color: #f59e0b;">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-0">Pending Receipts</h6>
-                    <span class="fs-4">📥</span>
-                </div>
-                <h2 class="mb-0 fw-bold text-light">{{ pending_receipts }}</h2>
-            </div>
+        <div class="kpi-card-ui h-100">
+            <div class="kpi-icon icon-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></div>
+            <h2 class="mb-0 fw-bold" style="color: #34D399;">{{ pending_receipts }}</h2>
+            <small class="text-white fw-semibold">Pending receipts</small>
+            <a href="/receipts" class="kpi-link" style="color: #34D399;">Validate <span>→</span></a>
         </div>
     </div>
-    
     <div class="col-md-3">
-        <div class="card kpi-card h-100" style="--accent-color: #10b981;">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-0">Pending Deliveries</h6>
-                    <span class="fs-4">📤</span>
+        <div class="kpi-card-ui h-100">
+            <div class="kpi-icon icon-orange"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg></div>
+            <h2 class="mb-0 fw-bold" style="color: #FB923C;">{{ pending_deliveries }}</h2>
+            <small class="text-white fw-semibold">Pending deliveries</small>
+            <a href="/deliveries" class="kpi-link" style="color: #FB923C;">Manage <span>→</span></a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="panel-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6 class="text-white fw-bold mb-0">Recent operations</h6>
+                <div class="d-flex align-items-center">
+                    <select class="select-minimal" id="opTypeFilter" onchange="filterOperations()">
+                        <option value="All">All types</option>
+                        <option value="Receipt">Receipts</option>
+                        <option value="Delivery">Deliveries</option>
+                        <option value="Adjustment">Adjustments</option>
+                    </select>
                 </div>
-                <h2 class="mb-0 fw-bold text-light">{{ pending_deliveries }}</h2>
+            </div>
+            
+            <table class="custom-table">
+                <thead><tr><th>REF</th><th>TYPE</th><th>LOCATION</th><th>DATE</th><th class="text-end">STATUS</th></tr></thead>
+                <tbody>
+                    {% for op in recent_ops %}
+                    <tr class="op-row" data-type="{{ op.document_type }}">
+                        <td class="fw-bold text-white">{{ op.document_type[:3]|upper }}-{{ op.id }}</td>
+                        <td><span class="tag tag-{{ op.document_type }}">{{ op.document_type }}</span></td>
+                        <td class="fw-bold text-white">{{ loc_map.get(op.dest_location_id, 'System') }}</td>
+                        <td style="color: #A1A1AA;">{{ op.created_at.strftime('%d %b') }}</td>
+                        <td class="text-end"><span class="status-{{ op.status }}">{{ op.status }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted pt-5">No recent operations.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="panel-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-white fw-bold mb-0">Low stock alerts</h6>
+                <span style="color: #A78BFA; font-size: 0.85rem;">All {{ low_stock }}</span>
+            </div>
+            <div class="stock-list mt-3">
+                {% for item in low_stock_items %}
+                <div class="stock-row">
+                    <div>
+                        <div class="fw-bold text-white" style="font-size: 0.9rem;">{{ item.product.name }}</div>
+                        <div style="color: #A1A1AA; font-size: 0.75rem;">{{ item.product.sku }} · {{ item.product.unit_of_measure }}</div>
+                        <div class="stock-indicator mt-2" style="width: 25%;"></div>
+                    </div>
+                    <div class="text-end">
+                        <div style="color: #F87171; font-size: 0.75rem; margin-bottom: 8px;">{{ item.qty }} left</div>
+                        <button class="btn-receipt" onclick="window.location.href='/receipts'">+ Receipt</button>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center text-muted pt-5">All product stock levels are healthy!</div>
+                {% endfor %}
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-5">
-    <div class="col-12">
-        <div class="card border-0" style="background-color: var(--surface-dark);">
-            <div class="card-header border-secondary bg-transparent pt-3 pb-2">
-                <h5 class="mb-0 text-light fw-bold">Recent Operations Flow</h5>
-            </div>
-            <div class="card-body text-center py-5 text-muted">
-                <p class="mb-0">Data visualization charts will render here.</p>
-            </div>
-        </div>
-    </div>
-</div>
+<script>
+    function filterOperations() {
+        const filterVal = document.getElementById('opTypeFilter').value;
+        const rows = document.querySelectorAll('.op-row');
+        rows.forEach(row => { row.style.display = (filterVal === 'All' || row.dataset.type === filterVal) ? '' : 'none'; });
+    }
+</script>
 {% endblock %}
