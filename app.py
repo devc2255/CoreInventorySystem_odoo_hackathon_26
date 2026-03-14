@@ -12,14 +12,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- MODELS ---
+# ==========================================
+# MODELS (Database Schema)
+# ==========================================
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False) # Used for 'Name'
+    username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='Manager')
+    # Profile columns
+    address = db.Column(db.Text, nullable=True)
+    preferred_payment = db.Column(db.String(20), nullable=True, default='UPI')
 
 class Location(db.Model):
     __tablename__ = 'locations'
@@ -67,16 +72,29 @@ class StockLedger(db.Model):
     quantity_change = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- AUTHENTICATION DECORATOR ---
+# ==========================================
+# AUTHENTICATION MIDDLEWARE (PERMANENT FIX)
+# ==========================================
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # 1. Check if the browser claims to be logged in
         if 'user_id' not in session:
             return redirect(url_for('login'))
+            
+        # 2. Check if that user actually still exists in the database
+        user = User.query.get(session['user_id'])
+        if not user:
+            session.clear() # Destroy the ghost session cookie
+            flash('Your session has expired or the database was reset. Please log in again.')
+            return redirect(url_for('login'))
+            
         return f(*args, **kwargs)
     return decorated_function
 
-# --- AUTH ROUTES ---
+# ==========================================
+# AUTHENTICATION ROUTES
+# ==========================================
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
@@ -90,7 +108,6 @@ def signup():
             
         hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
         new_user = User(username=name, email=email, password_hash=hashed_pw)
-        
         db.session.add(new_user)
         db.session.commit()
         
@@ -118,7 +135,9 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- FRONTEND ROUTES ---
+# ==========================================
+# FRONTEND VIEWS (Pages)
+# ==========================================
 @app.route('/')
 def index():
     return redirect(url_for('dashboard'))
@@ -131,29 +150,164 @@ def dashboard():
     pending_deliveries = InventoryOperation.query.filter_by(document_type='Delivery').filter(InventoryOperation.status != 'Done').count()
     return render_template('dashboard.html', total_products=total_products, pending_receipts=pending_receipts, pending_deliveries=pending_deliveries)
 
-# Placeholder routes for the other sidebar features
-@app.route('/products')
+@app.route('/products', methods=['GET', 'POST'])
 @login_required
-def products(): return render_template('feature.html', title="Products")
+def products():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        sku = request.form.get('sku')
+        category_id = request.form.get('category_id')
+        uom = request.form.get('uom')
+        
+        if Product.query.filter_by(sku=sku).first():
+            flash('Error: A product with this SKU already exists.')
+            return redirect(url_for('products'))
+            
+        new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom)
+        db.session.add(new_product)
+        db.session.commit()
+        
+        flash(f'Success: Product "{name}" added to catalog.')
+        return redirect(url_for('products'))
+
+    products_list = db.session.query(
+        Product.id, Product.name, Product.sku, Product.unit_of_measure, 
+        ProductCategory.name.label('category_name')
+    ).outerjoin(ProductCategory, Product.category_id == ProductCategory.id).all()
+    categories = ProductCategory.query.all()
+    return render_template('products.html', products=products_list, categories=categories)
 
 @app.route('/receipts')
 @login_required
-def receipts(): return render_template('feature.html', title="Receipts")
+def receipts():
+    vendors = Location.query.filter_by(type='Vendor').all()
+    warehouses = Location.query.filter_by(type='Internal').all()
+    product_list = Product.query.all()
+    return render_template('receipts.html', vendors=vendors, warehouses=warehouses, products=product_list)
 
 @app.route('/deliveries')
 @login_required
-def deliveries(): return render_template('feature.html', title="Deliveries")
+def deliveries():
+    customers = Location.query.filter_by(type='Customer').all()
+    warehouses = Location.query.filter_by(type='Internal').all()
+    product_list = Product.query.all()
+    return render_template('deliveries.html', customers=customers, warehouses=warehouses, products=product_list)
 
 @app.route('/adjustments')
 @login_required
-def adjustments(): return render_template('feature.html', title="Stock Adjustments")
+def adjustments():
+    warehouses = Location.query.filter_by(type='Internal').all()
+    product_list = Product.query.all()
+    return render_template('adjustments.html', warehouses=warehouses, products=product_list)
 
-@app.route('/profile')
+@app.route('/profile', methods=['GET', 'POST'])
 @login_required
-def profile(): return render_template('feature.html', title="My Profile")
+def profile():
+    user = User.query.get(session['user_id'])
+    
+    if request.method == 'POST':
+        user.username = request.form.get('name')
+        user.email = request.form.get('email')
+        
+        new_password = request.form.get('password')
+        if new_password and new_password.strip() != '':
+            user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
+            
+        user.address = request.form.get('address')
+        user.preferred_payment = request.form.get('preferred_payment')
+        
+        db.session.commit()
+        session['user_name'] = user.username
+        
+        flash('System Profile updated successfully!')
+        return redirect(url_for('profile'))
+        
+    return render_template('profile.html', user=user)
 
+# ==========================================
+# API ENDPOINTS (Data Processing)
+# ==========================================
+@app.route('/api/seed', methods=['POST'])
+def seed_data():
+    if User.query.first():
+        return jsonify({"message": "Dummy data already exists!"}), 200
 
-# --- INITIALIZATION ---
+    user = User(username="admin", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager")
+    vendor = Location(name="Steel Supplier Inc.", type="Vendor")
+    warehouse = Location(name="Main Warehouse", type="Internal")
+    customer = Location(name="Acme Manufacturing", type="Customer")
+    adjustment_loc = Location(name="Virtual Adjustment Log", type="Inventory Loss")
+    category = ProductCategory(name="Raw Materials")
+    
+    db.session.add_all([user, vendor, warehouse, customer, adjustment_loc, category])
+    db.session.commit()
+    
+    product = Product(name="Steel Rods", sku="SR-001", category_id=category.id, unit_of_measure="kg")
+    db.session.add(product)
+    db.session.commit()
+    return jsonify({"message": "Dummy data created!"}), 201
+
+@app.route('/api/receipts', methods=['POST'])
+def process_receipt():
+    data = request.get_json()
+    new_receipt = InventoryOperation(document_type='Receipt', status='Done', source_location_id=data['vendor_id'], dest_location_id=data['warehouse_id'], created_by=data['user_id'])
+    db.session.add(new_receipt)
+    db.session.flush() 
+    
+    for item in data['items']:
+        db.session.add(OperationLine(operation_id=new_receipt.id, product_id=item['product_id'], quantity=item['quantity']))
+        db.session.add(StockLedger(product_id=item['product_id'], location_id=data['warehouse_id'], operation_id=new_receipt.id, quantity_change=item['quantity']))
+        
+    db.session.commit()
+    return jsonify({"message": "Receipt validated and stock updated!", "receipt_id": new_receipt.id}), 201
+
+@app.route('/api/deliveries', methods=['POST'])
+def process_delivery():
+    data = request.get_json()
+    new_delivery = InventoryOperation(document_type='Delivery', status='Done', source_location_id=data['warehouse_id'], dest_location_id=data['customer_id'], created_by=data['user_id'])
+    db.session.add(new_delivery)
+    db.session.flush()
+    
+    for item in data['items']:
+        db.session.add(OperationLine(operation_id=new_delivery.id, product_id=item['product_id'], quantity=item['quantity']))
+        db.session.add(StockLedger(product_id=item['product_id'], location_id=data['warehouse_id'], operation_id=new_delivery.id, quantity_change=-float(item['quantity'])))
+        
+    db.session.commit()
+    return jsonify({"message": "Delivery validated! Stock reduced.", "delivery_id": new_delivery.id}), 201
+
+@app.route('/api/adjustments', methods=['POST'])
+def process_adjustment():
+    data = request.get_json()
+    product_id = int(data['product_id'])
+    warehouse_id = int(data['warehouse_id'])
+    counted_qty = float(data['counted_quantity'])
+    
+    current_stock = db.session.query(db.func.sum(StockLedger.quantity_change)).filter_by(product_id=product_id, location_id=warehouse_id).scalar() or 0.0
+    diff = counted_qty - current_stock
+    
+    if diff == 0:
+        return jsonify({"message": "Count matches recorded stock. No adjustment needed."}), 200
+        
+    adj_location = Location.query.filter_by(type='Inventory Loss').first()
+    
+    new_adj = InventoryOperation(
+        document_type='Adjustment', status='Done',
+        source_location_id=warehouse_id if diff < 0 else adj_location.id,
+        dest_location_id=adj_location.id if diff < 0 else warehouse_id,
+        created_by=data['user_id']
+    )
+    db.session.add(new_adj)
+    db.session.flush()
+    
+    db.session.add(OperationLine(operation_id=new_adj.id, product_id=product_id, quantity=abs(diff)))
+    db.session.add(StockLedger(product_id=product_id, location_id=warehouse_id, operation_id=new_adj.id, quantity_change=diff))
+    
+    db.session.commit()
+    return jsonify({"message": f"Adjustment successful. Stock updated by {diff:+.2f} units."}), 201
+
+# ==========================================
+# SERVER INITIALIZATION
+# ==========================================
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

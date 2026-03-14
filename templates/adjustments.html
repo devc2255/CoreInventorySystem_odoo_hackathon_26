@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .dark-input { background-color: var(--bg-dark); border: 1px solid var(--border-dark); color: var(--text-primary); }
+    .dark-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); color: white; }
+</style>
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
+    <h1 class="h2 text-light fw-bold">Stock Adjustments</h1>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0 mb-4" style="background-color: var(--surface-dark);">
+            <div class="card-body p-4">
+                <div id="statusMessage" class="alert d-none" role="alert"></div>
+
+                <form id="adjustmentForm">
+                    <input type="hidden" id="userId" value="{{ session.get('user_id') }}">
+                    <h5 class="text-light mb-4">Physical Inventory Count</h5>
+                    
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase fw-bold">Warehouse / Location</label>
+                        <select id="warehouseId" class="form-select dark-input" required>
+                            <option value="" disabled selected>Select Location...</option>
+                            {% for warehouse in warehouses %}
+                                <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase fw-bold">Product to Adjust</label>
+                        <select id="productId" class="form-select dark-input" required>
+                            <option value="" disabled selected>Select Product...</option>
+                            {% for product in products %}
+                                <option value="{{ product.id }}">[{{ product.sku }}] {{ product.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label text-muted small text-uppercase fw-bold">Actual Counted Quantity</label>
+                        <input type="number" step="0.01" min="0" id="countedQuantity" class="form-control dark-input form-control-lg" placeholder="0.00" required>
+                        <small class="text-muted">The system will automatically calculate the difference and log the adjustment.</small>
+                    </div>
+
+                    <button type="button" class="btn btn-warning w-100 py-2 fw-bold" onclick="submitAdjustment()">Process Adjustment</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function submitAdjustment() {
+        const warehouseId = document.getElementById('warehouseId').value;
+        const productId = document.getElementById('productId').value;
+        const countedQty = document.getElementById('countedQuantity').value;
+
+        if (!warehouseId || !productId || countedQty === '') {
+            showStatus('All fields are required.', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/adjustments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    warehouse_id: parseInt(warehouseId),
+                    product_id: parseInt(productId),
+                    counted_quantity: parseFloat(countedQty),
+                    user_id: parseInt(document.getElementById('userId').value)
+                })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showStatus(result.message, 'success');
+                document.getElementById('adjustmentForm').reset();
+            } else showStatus(result.message, 'danger');
+        } catch (e) { showStatus('Network error.', 'danger'); }
+    }
+
+    function showStatus(msg, type) {
+        const box = document.getElementById('statusMessage');
+        box.className = `alert alert-${type} border-0 bg-${type} bg-opacity-10 text-${type}`;
+        box.textContent = msg;
+        box.classList.remove('d-none');
+        setTimeout(() => box.classList.add('d-none'), 5000);
+    }
+</script>
+{% endblock %}

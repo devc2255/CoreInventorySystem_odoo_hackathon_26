@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .dark-input {
+        background-color: var(--bg-dark);
+        border: 1px solid var(--border-dark);
+        color: var(--text-primary);
+    }
+    .dark-input:focus {
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+        color: white;
+    }
+    .table-dark-custom th { 
+        background-color: rgba(255,255,255,0.02); 
+        border-bottom: 2px solid var(--border-dark); 
+        color: var(--text-muted); 
+    }
+    .table-dark-custom td { 
+        border-bottom: 1px solid var(--border-dark); 
+        padding: 1rem 0.5rem;
+    }
+</style>
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
+    <h1 class="h2 text-light fw-bold">Inbound Receipts</h1>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 mb-4" style="background-color: var(--surface-dark);">
+            <div class="card-body p-4">
+                <div id="statusMessage" class="alert d-none" role="alert"></div>
+
+                <form id="receiptForm">
+                    <input type="hidden" id="userId" value="{{ session.get('user_id') }}">
+
+                    <h5 class="text-light mb-3">Document Details</h5>
+                    <div class="row mb-4">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small text-uppercase fw-bold">Receive From (Vendor)</label>
+                            <select id="vendorId" class="form-select dark-input" required>
+                                <option value="" disabled selected>Select Supplier...</option>
+                                {% for vendor in vendors %}
+                                    <option value="{{ vendor.id }}">{{ vendor.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small text-uppercase fw-bold">Destination Location</label>
+                            <select id="warehouseId" class="form-select dark-input" required>
+                                <option value="" disabled selected>Select Warehouse...</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+                        <h5 class="text-light mb-0">Operation Lines</h5>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="addRow()">+ Add Line Item</button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-dark-custom w-100" id="itemsTable">
+                            <thead>
+                                <tr>
+                                    <th width="60%">Product</th>
+                                    <th width="30%">Quantity</th>
+                                    <th width="10%" class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                </tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end mt-4 pt-3 border-top border-secondary">
+                        <button type="button" class="btn btn-primary px-5 py-2 fw-bold" onclick="submitReceipt()">Validate Receipt</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="productOptionsTemplate">
+    <option value="" disabled selected>Select Product...</option>
+    {% for product in products %}
+        <option value="{{ product.id }}">[{{ product.sku }}] {{ product.name }}</option>
+    {% endfor %}
+</template>
+
+<script>
+    // Initialize with one empty row
+    document.addEventListener('DOMContentLoaded', () => {
+        addRow();
+    });
+
+    function addRow() {
+        const tbody = document.getElementById('itemsBody');
+        const optionsHtml = document.getElementById('productOptionsTemplate').innerHTML;
+        
+        const tr = document.createElement('tr');
+        tr.className = 'item-row';
+        tr.innerHTML = `
+            <td>
+                <select class="form-select dark-input product-select" required>
+                    ${optionsHtml}
+                </select>
+            </td>
+            <td>
+                <input type="number" step="0.01" min="0.01" class="form-control dark-input quantity-input" placeholder="0.00" required>
+            </td>
+            <td class="text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">X</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    async function submitReceipt() {
+        const vendorId = document.getElementById('vendorId').value;
+        const warehouseId = document.getElementById('warehouseId').value;
+        const userId = document.getElementById('userId').value;
+        const statusBox = document.getElementById('statusMessage');
+        
+        // Basic Validation
+        if (!vendorId || !warehouseId) {
+            showStatus('Please select both a vendor and a destination warehouse.', 'danger');
+            return;
+        }
+
+        const items = [];
+        const rows = document.querySelectorAll('.item-row');
+        let hasError = false;
+
+        rows.forEach(row => {
+            const productId = row.querySelector('.product-select').value;
+            const qty = row.querySelector('.quantity-input').value;
+            
+            if (!productId || !qty || qty <= 0) {
+                hasError = true;
+            } else {
+                items.push({
+                    product_id: parseInt(productId),
+                    quantity: parseFloat(qty)
+                });
+            }
+        });
+
+        if (hasError || items.length === 0) {
+            showStatus('Please ensure all items have a selected product and a valid quantity.', 'warning');
+            return;
+        }
+
+        // Construct the JSON payload exactly as our API expects
+        const payload = {
+            vendor_id: parseInt(vendorId),
+            warehouse_id: parseInt(warehouseId),
+            user_id: parseInt(userId),
+            items: items
+        };
+
+        try {
+            const response = await fetch('/api/receipts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showStatus('Receipt Validated! Stock has been updated.', 'success');
+                // Reset form and UI
+                document.getElementById('receiptForm').reset();
+                document.getElementById('itemsBody').innerHTML = '';
+                addRow();
+            } else {
+                showStatus(result.message || 'An error occurred.', 'danger');
+            }
+        } catch (error) {
+            showStatus('Network error. Please try again.', 'danger');
+        }
+    }
+
+    function showStatus(message, type) {
+        const box = document.getElementById('statusMessage');
+        box.className = `alert alert-${type} border-0 bg-${type} bg-opacity-10 text-${type}`;
+        box.textContent = message;
+        // Auto-hide after 5 seconds
+        setTimeout(() => box.classList.add('d-none'), 5000);
+    }
+</script>
+{% endblock %}

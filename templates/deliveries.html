@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .dark-input { background-color: var(--bg-dark); border: 1px solid var(--border-dark); color: var(--text-primary); }
+    .dark-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); color: white; }
+    .table-dark-custom th { background-color: rgba(255,255,255,0.02); border-bottom: 2px solid var(--border-dark); color: var(--text-muted); }
+    .table-dark-custom td { border-bottom: 1px solid var(--border-dark); padding: 1rem 0.5rem; }
+</style>
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4 pb-2 border-bottom border-secondary">
+    <h1 class="h2 text-light fw-bold">Outbound Deliveries</h1>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 mb-4" style="background-color: var(--surface-dark);">
+            <div class="card-body p-4">
+                <div id="statusMessage" class="alert d-none" role="alert"></div>
+
+                <form id="deliveryForm">
+                    <input type="hidden" id="userId" value="{{ session.get('user_id') }}">
+
+                    <h5 class="text-light mb-3">Shipment Details</h5>
+                    <div class="row mb-4">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small text-uppercase fw-bold">Source Warehouse</label>
+                            <select id="warehouseId" class="form-select dark-input" required>
+                                <option value="" disabled selected>Select Origin...</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small text-uppercase fw-bold">Customer Destination</label>
+                            <select id="customerId" class="form-select dark-input" required>
+                                <option value="" disabled selected>Select Customer...</option>
+                                {% for customer in customers %}
+                                    <option value="{{ customer.id }}">{{ customer.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+                        <h5 class="text-light mb-0">Items to Ship</h5>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="addRow()">+ Add Line Item</button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-dark-custom w-100" id="itemsTable">
+                            <thead>
+                                <tr>
+                                    <th width="60%">Product</th>
+                                    <th width="30%">Quantity to Ship</th>
+                                    <th width="10%" class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end mt-4 pt-3 border-top border-secondary">
+                        <button type="button" class="btn btn-success px-5 py-2 fw-bold" onclick="submitDelivery()">Validate Delivery</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="productOptionsTemplate">
+    <option value="" disabled selected>Select Product...</option>
+    {% for product in products %}
+        <option value="{{ product.id }}">[{{ product.sku }}] {{ product.name }}</option>
+    {% endfor %}
+</template>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => addRow());
+
+    function addRow() {
+        const tbody = document.getElementById('itemsBody');
+        const tr = document.createElement('tr');
+        tr.className = 'item-row';
+        tr.innerHTML = `
+            <td><select class="form-select dark-input product-select" required>${document.getElementById('productOptionsTemplate').innerHTML}</select></td>
+            <td><input type="number" step="0.01" min="0.01" class="form-control dark-input quantity-input" placeholder="0.00" required></td>
+            <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">X</button></td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    async function submitDelivery() {
+        const warehouseId = document.getElementById('warehouseId').value;
+        const customerId = document.getElementById('customerId').value;
+        const items = [];
+        let hasError = false;
+
+        document.querySelectorAll('.item-row').forEach(row => {
+            const productId = row.querySelector('.product-select').value;
+            const qty = row.querySelector('.quantity-input').value;
+            if (!productId || !qty || qty <= 0) hasError = true;
+            else items.push({ product_id: parseInt(productId), quantity: parseFloat(qty) });
+        });
+
+        if (hasError || items.length === 0 || !warehouseId || !customerId) {
+            showStatus('Please complete all fields correctly.', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/deliveries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    warehouse_id: parseInt(warehouseId),
+                    customer_id: parseInt(customerId),
+                    user_id: parseInt(document.getElementById('userId').value),
+                    items: items
+                })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showStatus('Delivery Validated! Stock deducted.', 'success');
+                document.getElementById('deliveryForm').reset();
+                document.getElementById('itemsBody').innerHTML = '';
+                addRow();
+            } else showStatus(result.message, 'danger');
+        } catch (e) { showStatus('Network error.', 'danger'); }
+    }
+
+    function showStatus(msg, type) {
+        const box = document.getElementById('statusMessage');
+        box.className = `alert alert-${type} border-0 bg-${type} bg-opacity-10 text-${type}`;
+        box.textContent = msg;
+        setTimeout(() => box.classList.add('d-none'), 5000);
+    }
+</script>
+{% endblock %}
