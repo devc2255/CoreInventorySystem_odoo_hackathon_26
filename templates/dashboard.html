@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4">
+    <h1 class="h2">Inventory Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <select class="form-select form-select-sm me-2">
+            <option>All Warehouses</option>
+            <option>Main Warehouse</option>
+        </select>
+        <select class="form-select form-select-sm">
+            <option>All Document Types</option>
+            <option>Receipts</option>
+            <option>Deliveries</option>
+        </select>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card kpi-card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Products in Stock</h6>
+                <h3 class="mb-0">{{ total_products }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card kpi-card" style="border-left-color: #dc3545;">
+            <div class="card-body">
+                <h6 class="text-muted">Low / Out of Stock</h6>
+                <h3 class="mb-0">0</h3> </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card kpi-card" style="border-left-color: #ffc107;">
+            <div class="card-body">
+                <h6 class="text-muted">Pending Receipts</h6>
+                <h3 class="mb-0">{{ pending_receipts }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card kpi-card" style="border-left-color: #198754;">
+            <div class="card-body">
+                <h6 class="text-muted">Pending Deliveries</h6>
+                <h3 class="mb-0">{{ pending_deliveries }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
