@@ -1,0 +1,1 @@
+# CoreInventorySystem_odoo_hackathon_26
