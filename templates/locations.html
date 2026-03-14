@@ -45,13 +45,18 @@
     </div>
     <div class="col-lg-8">
         <div class="panel-card h-100">
-            <h6 class="text-white fw-bold mb-4">Current Network Map</h6>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6 class="text-white fw-bold mb-0">Current Network Map</h6>
+                {% if is_filtered %}
+                    <a href="/locations" class="btn btn-sm btn-outline-secondary" style="font-size: 0.75rem; border-radius: 6px; border-color: #3F3F46; color: #A1A1AA;">✕ Clear Filter</a>
+                {% endif %}
+            </div>
             <div class="table-responsive">
                 <table class="custom-table">
                     <thead><tr><th>ID</th><th>Location Name</th><th class="text-end">Classification</th></tr></thead>
                     <tbody>
                         {% for loc in locations %}
-                        <tr>
+                        <tr {% if is_filtered %}style="background-color: rgba(248, 113, 113, 0.05);"{% endif %}>
                             <td class="text-muted-custom">LOC-0{{ loc.id }}</td>
                             <td class="fw-bold text-white">{{ loc.name }}</td>
                             <td class="text-end">

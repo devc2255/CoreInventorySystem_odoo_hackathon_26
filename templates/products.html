@@ -46,13 +46,18 @@
     </div>
     <div class="col-lg-8">
         <div class="panel-card h-100">
-            <h6 class="text-white fw-bold mb-4">Catalog Overview</h6>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6 class="text-white fw-bold mb-0">Catalog Overview</h6>
+                {% if is_filtered %}
+                    <a href="/products" class="btn btn-sm btn-outline-secondary" style="font-size: 0.75rem; border-radius: 6px; border-color: #3F3F46; color: #A1A1AA;">✕ Clear Filter</a>
+                {% endif %}
+            </div>
             <div class="table-responsive">
                 <table class="custom-table">
                     <thead><tr><th>SKU</th><th>Product Name</th><th>Category</th><th class="text-end">UoM</th></tr></thead>
                     <tbody>
                         {% for p in products %}
-                        <tr>
+                        <tr {% if is_filtered %}style="background-color: rgba(248, 113, 113, 0.05);"{% endif %}>
                             <td class="text-muted-custom">{{ p.sku }}</td>
                             <td class="fw-bold text-white">{{ p.name }}</td>
                             <td>{{ p.category_name }}</td>

@@ -278,15 +278,32 @@ def products():
         sku = request.form.get('sku')
         category_id = request.form.get('category_id')
         uom = request.form.get('uom')
+        
+        # Check for duplicates
+        existing_product = Product.query.filter((Product.sku == sku) | (func.lower(Product.name) == name.lower())).first()
+        if existing_product:
+            flash(f'Error: A product with the name "{name}" or SKU "{sku}" is already in the catalog!', 'danger')
+            # Redirect back with the duplicate's ID in the URL to trigger the filter
+            return redirect(url_for('products', duplicate_id=existing_product.id))
+            
         new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom)
         db.session.add(new_product)
         db.session.commit()
         log_action(session['user_id'], "Product Created", f"Added '{name}' (SKU: {sku}) to catalog.")
         flash(f'Success: Product "{name}" added.', 'success')
         return redirect(url_for('products'))
-    products_list = db.session.query(Product.id, Product.name, Product.sku, Product.unit_of_measure, ProductCategory.name.label('category_name')).outerjoin(ProductCategory, Product.category_id == ProductCategory.id).all()
+        
+    duplicate_id = request.args.get('duplicate_id')
+    base_query = db.session.query(Product.id, Product.name, Product.sku, Product.unit_of_measure, ProductCategory.name.label('category_name')).outerjoin(ProductCategory, Product.category_id == ProductCategory.id)
+    
+    # Filter the list if a duplicate ID was passed
+    if duplicate_id:
+        products_list = base_query.filter(Product.id == duplicate_id).all()
+    else:
+        products_list = base_query.all()
+        
     categories = ProductCategory.query.all()
-    return render_template('products.html', products=products_list, categories=categories)
+    return render_template('products.html', products=products_list, categories=categories, is_filtered=bool(duplicate_id))
 
 @app.route('/locations', methods=['GET', 'POST'])
 @login_required
@@ -295,14 +312,30 @@ def locations():
     if request.method == 'POST':
         name = request.form.get('name')
         loc_type = request.form.get('type')
+        
+        # Check for duplicates
+        existing_loc = Location.query.filter(func.lower(Location.name) == name.lower()).first()
+        if existing_loc:
+            flash(f'Error: A location or partner named "{name}" is already registered!', 'danger')
+            # Redirect back with the duplicate's ID in the URL to trigger the filter
+            return redirect(url_for('locations', duplicate_id=existing_loc.id))
+            
         new_loc = Location(name=name, type=loc_type)
         db.session.add(new_loc)
         db.session.commit()
         log_action(session['user_id'], "Location Created", f"Added new {loc_type}: '{name}'.")
         flash(f'Success: {loc_type} "{name}" added to network.', 'success')
         return redirect(url_for('locations'))
-    locations_list = Location.query.all()
-    return render_template('locations.html', locations=locations_list)
+    
+    duplicate_id = request.args.get('duplicate_id')
+    
+    # Filter the list if a duplicate ID was passed
+    if duplicate_id:
+        locations_list = Location.query.filter_by(id=duplicate_id).all()
+    else:
+        locations_list = Location.query.all()
+        
+    return render_template('locations.html', locations=locations_list, is_filtered=bool(duplicate_id))
 
 @app.route('/receipts')
 @login_required
