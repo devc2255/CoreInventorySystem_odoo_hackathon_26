@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from sqlalchemy import func
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_hackathon_key' 
@@ -22,7 +23,6 @@ class User(db.Model):
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='Manager')
-    # Profile columns
     address = db.Column(db.Text, nullable=True)
     preferred_payment = db.Column(db.String(20), nullable=True, default='UPI')
 
@@ -73,24 +73,31 @@ class StockLedger(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 # ==========================================
-# AUTHENTICATION MIDDLEWARE (PERMANENT FIX)
+# AUTHENTICATION & RBAC MIDDLEWARE
 # ==========================================
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # 1. Check if the browser claims to be logged in
         if 'user_id' not in session:
             return redirect(url_for('login'))
-            
-        # 2. Check if that user actually still exists in the database
         user = User.query.get(session['user_id'])
         if not user:
-            session.clear() # Destroy the ghost session cookie
-            flash('Your session has expired or the database was reset. Please log in again.')
+            session.clear()
+            flash('Your session has expired. Please log in again.')
             return redirect(url_for('login'))
-            
         return f(*args, **kwargs)
     return decorated_function
+
+def role_required(allowed_role):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if session.get('user_role') != allowed_role:
+                flash(f'Access Denied: Requires {allowed_role} clearance.', 'danger')
+                return redirect(url_for('dashboard'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ==========================================
 # AUTHENTICATION ROUTES
@@ -101,13 +108,14 @@ def signup():
         name = request.form.get('name')
         email = request.form.get('email')
         password = request.form.get('password')
+        role = request.form.get('role', 'Manager')
         
         if User.query.filter_by(email=email).first():
             flash('Email already exists. Please log in.')
             return redirect(url_for('signup'))
             
         hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
-        new_user = User(username=name, email=email, password_hash=hashed_pw)
+        new_user = User(username=name, email=email, password_hash=hashed_pw, role=role)
         db.session.add(new_user)
         db.session.commit()
         
@@ -125,6 +133,7 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
             session['user_name'] = user.username
+            session['user_role'] = user.role
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid email or password.')
@@ -148,10 +157,29 @@ def dashboard():
     total_products = Product.query.count()
     pending_receipts = InventoryOperation.query.filter_by(document_type='Receipt').filter(InventoryOperation.status != 'Done').count()
     pending_deliveries = InventoryOperation.query.filter_by(document_type='Delivery').filter(InventoryOperation.status != 'Done').count()
-    return render_template('dashboard.html', total_products=total_products, pending_receipts=pending_receipts, pending_deliveries=pending_deliveries)
+    
+    # Mathematical Logic for "Low / Out of Stock" KPI
+    stock_levels = db.session.query(
+        StockLedger.product_id,
+        func.sum(StockLedger.quantity_change).label('total_stock')
+    ).group_by(StockLedger.product_id).all()
+    
+    # Threshold set to 10 units
+    low_stock_count = sum(1 for item in stock_levels if item.total_stock <= 10)
+    
+    products_with_ledger = len(stock_levels)
+    products_without_ledger = total_products - products_with_ledger
+    final_low_stock_count = low_stock_count + products_without_ledger
+
+    return render_template('dashboard.html', 
+                           total_products=total_products, 
+                           pending_receipts=pending_receipts, 
+                           pending_deliveries=pending_deliveries,
+                           low_stock=final_low_stock_count)
 
 @app.route('/products', methods=['GET', 'POST'])
 @login_required
+@role_required('Manager') 
 def products():
     if request.method == 'POST':
         name = request.form.get('name')
@@ -160,14 +188,13 @@ def products():
         uom = request.form.get('uom')
         
         if Product.query.filter_by(sku=sku).first():
-            flash('Error: A product with this SKU already exists.')
+            flash('Error: A product with this SKU already exists.', 'danger')
             return redirect(url_for('products'))
             
         new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom)
         db.session.add(new_product)
         db.session.commit()
-        
-        flash(f'Success: Product "{name}" added to catalog.')
+        flash(f'Success: Product "{name}" added to catalog.', 'success')
         return redirect(url_for('products'))
 
     products_list = db.session.query(
@@ -204,24 +231,18 @@ def adjustments():
 @login_required
 def profile():
     user = User.query.get(session['user_id'])
-    
     if request.method == 'POST':
         user.username = request.form.get('name')
         user.email = request.form.get('email')
-        
         new_password = request.form.get('password')
         if new_password and new_password.strip() != '':
             user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
-            
         user.address = request.form.get('address')
         user.preferred_payment = request.form.get('preferred_payment')
-        
         db.session.commit()
         session['user_name'] = user.username
-        
-        flash('System Profile updated successfully!')
+        flash('System Profile updated successfully!', 'success')
         return redirect(url_for('profile'))
-        
     return render_template('profile.html', user=user)
 
 # ==========================================
@@ -232,20 +253,22 @@ def seed_data():
     if User.query.first():
         return jsonify({"message": "Dummy data already exists!"}), 200
 
-    user = User(username="admin", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager")
+    admin = User(username="Admin Manager", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager")
+    staff = User(username="Warehouse Staff", email="staff@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Warehouse_Staff")
+    
     vendor = Location(name="Steel Supplier Inc.", type="Vendor")
     warehouse = Location(name="Main Warehouse", type="Internal")
     customer = Location(name="Acme Manufacturing", type="Customer")
     adjustment_loc = Location(name="Virtual Adjustment Log", type="Inventory Loss")
     category = ProductCategory(name="Raw Materials")
     
-    db.session.add_all([user, vendor, warehouse, customer, adjustment_loc, category])
+    db.session.add_all([admin, staff, vendor, warehouse, customer, adjustment_loc, category])
     db.session.commit()
     
     product = Product(name="Steel Rods", sku="SR-001", category_id=category.id, unit_of_measure="kg")
     db.session.add(product)
     db.session.commit()
-    return jsonify({"message": "Dummy data created!"}), 201
+    return jsonify({"message": "Dummy data created! Use admin@test.com or staff@test.com to test RBAC."}), 201
 
 @app.route('/api/receipts', methods=['POST'])
 def process_receipt():
@@ -253,11 +276,9 @@ def process_receipt():
     new_receipt = InventoryOperation(document_type='Receipt', status='Done', source_location_id=data['vendor_id'], dest_location_id=data['warehouse_id'], created_by=data['user_id'])
     db.session.add(new_receipt)
     db.session.flush() 
-    
     for item in data['items']:
         db.session.add(OperationLine(operation_id=new_receipt.id, product_id=item['product_id'], quantity=item['quantity']))
         db.session.add(StockLedger(product_id=item['product_id'], location_id=data['warehouse_id'], operation_id=new_receipt.id, quantity_change=item['quantity']))
-        
     db.session.commit()
     return jsonify({"message": "Receipt validated and stock updated!", "receipt_id": new_receipt.id}), 201
 
@@ -267,11 +288,9 @@ def process_delivery():
     new_delivery = InventoryOperation(document_type='Delivery', status='Done', source_location_id=data['warehouse_id'], dest_location_id=data['customer_id'], created_by=data['user_id'])
     db.session.add(new_delivery)
     db.session.flush()
-    
     for item in data['items']:
         db.session.add(OperationLine(operation_id=new_delivery.id, product_id=item['product_id'], quantity=item['quantity']))
         db.session.add(StockLedger(product_id=item['product_id'], location_id=data['warehouse_id'], operation_id=new_delivery.id, quantity_change=-float(item['quantity'])))
-        
     db.session.commit()
     return jsonify({"message": "Delivery validated! Stock reduced.", "delivery_id": new_delivery.id}), 201
 
@@ -281,33 +300,19 @@ def process_adjustment():
     product_id = int(data['product_id'])
     warehouse_id = int(data['warehouse_id'])
     counted_qty = float(data['counted_quantity'])
-    
     current_stock = db.session.query(db.func.sum(StockLedger.quantity_change)).filter_by(product_id=product_id, location_id=warehouse_id).scalar() or 0.0
     diff = counted_qty - current_stock
-    
     if diff == 0:
         return jsonify({"message": "Count matches recorded stock. No adjustment needed."}), 200
-        
     adj_location = Location.query.filter_by(type='Inventory Loss').first()
-    
-    new_adj = InventoryOperation(
-        document_type='Adjustment', status='Done',
-        source_location_id=warehouse_id if diff < 0 else adj_location.id,
-        dest_location_id=adj_location.id if diff < 0 else warehouse_id,
-        created_by=data['user_id']
-    )
+    new_adj = InventoryOperation(document_type='Adjustment', status='Done', source_location_id=warehouse_id if diff < 0 else adj_location.id, dest_location_id=adj_location.id if diff < 0 else warehouse_id, created_by=data['user_id'])
     db.session.add(new_adj)
     db.session.flush()
-    
     db.session.add(OperationLine(operation_id=new_adj.id, product_id=product_id, quantity=abs(diff)))
     db.session.add(StockLedger(product_id=product_id, location_id=warehouse_id, operation_id=new_adj.id, quantity_change=diff))
-    
     db.session.commit()
     return jsonify({"message": f"Adjustment successful. Stock updated by {diff:+.2f} units."}), 201
 
-# ==========================================
-# SERVER INITIALIZATION
-# ==========================================
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
