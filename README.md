@@ -65,7 +65,7 @@ Open your browser at `http://localhost:5000`.
 
 Paste your deployed application URL here:
 
-`https://your-deployment-link.example.com`
+`https://core-inventory-system-rpi1.onrender.com`
 
 ## Seed Demo Data
 
