@@ -38,7 +38,7 @@ This repository provides a lightweight warehouse system with product pricing, re
 - `pip`
 
 [Live Deployment](https://core-inventory-system-rpi1.onrender.com)
-
+[![Database](https://img.shields.io/badge/Database-Neon_PostgreSQL-316192)](https://neon.tech/)
 ## Installation
 
 1. Clone the repository:
