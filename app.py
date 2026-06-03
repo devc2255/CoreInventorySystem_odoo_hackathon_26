@@ -159,7 +159,9 @@ def login():
             log_action(user.id, "System Login", f"Authenticated successfully via {email}")
             return redirect(url_for('dashboard'))
         else:
+            # PRG Fix: Redirect on failed login instead of falling through to render
             flash('Invalid email or password.', 'danger')
+            return redirect(url_for('login'))
     return render_template('login.html')
 
 @app.route('/logout')
@@ -182,7 +184,6 @@ def forgot_password():
             user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
             db.session.commit()
             
-            # Print to terminal to act as our "Email Server"
             print(f"\n========== 📧 SYSTEM EMAIL OUTBOX ==========")
             print(f"To: {email}")
             print(f"Subject: Password Reset Request")
@@ -193,7 +194,9 @@ def forgot_password():
             session['reset_email'] = email
             return redirect(url_for('verify_otp'))
         else:
+            # PRG Fix: Redirect on failure 
             flash('If that email is registered, an OTP has been sent.', 'info')
+            return redirect(url_for('forgot_password'))
             
     return render_template('forgot_password.html')
 
@@ -212,7 +215,9 @@ def verify_otp():
             session['otp_verified'] = True
             return redirect(url_for('reset_password'))
         else:
+            # PRG Fix: Redirect on invalid OTP
             flash('Invalid OTP. Please check your email and try again.', 'danger')
+            return redirect(url_for('verify_otp'))
             
     return render_template('verify_otp.html')
 
@@ -235,6 +240,10 @@ def reset_password():
             session.pop('otp_verified', None)
             flash('Password reset successfully! You can now log in.', 'success')
             return redirect(url_for('login'))
+        else:
+            # PRG Fix: Catch edge case where user is not found during reset
+            flash('An error occurred during password reset.', 'danger')
+            return redirect(url_for('forgot_password'))
             
     return render_template('reset_password.html')
 
@@ -283,7 +292,6 @@ def products():
         existing_product = Product.query.filter((Product.sku == sku) | (func.lower(Product.name) == name.lower())).first()
         if existing_product:
             flash(f'Error: A product with the name "{name}" or SKU "{sku}" is already in the catalog!', 'danger')
-            # Redirect back with the duplicate's ID in the URL to trigger the filter
             return redirect(url_for('products', duplicate_id=existing_product.id))
             
         new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom)
@@ -317,7 +325,6 @@ def locations():
         existing_loc = Location.query.filter(func.lower(Location.name) == name.lower()).first()
         if existing_loc:
             flash(f'Error: A location or partner named "{name}" is already registered!', 'danger')
-            # Redirect back with the duplicate's ID in the URL to trigger the filter
             return redirect(url_for('locations', duplicate_id=existing_loc.id))
             
         new_loc = Location(name=name, type=loc_type)
