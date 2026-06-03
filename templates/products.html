@@ -36,10 +36,22 @@
                         {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
                     </select>
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="form-label text-muted-custom">Unit of Measure</label>
                     <input type="text" name="uom" class="form-control dark-input" required placeholder="e.g. kg, pcs">
                 </div>
+                
+                <div class="row g-2 mb-4">
+                    <div class="col-6">
+                        <label class="form-label text-muted-custom">Cost Price ($)</label>
+                        <input type="number" step="0.01" name="cost_price" class="form-control dark-input" required placeholder="0.00">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-muted-custom">Sale Price ($)</label>
+                        <input type="number" step="0.01" name="sale_price" class="form-control dark-input" required placeholder="0.00">
+                    </div>
+                </div>
+
                 <button type="submit" class="btn-purple w-100">+ Add Product</button>
             </form>
         </div>
@@ -54,17 +66,29 @@
             </div>
             <div class="table-responsive">
                 <table class="custom-table">
-                    <thead><tr><th>SKU</th><th>Product Name</th><th>Category</th><th class="text-end">UoM</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>Product Name</th>
+                            <th>Category</th>
+                            <th>Cost</th>
+                            <th>Sale</th>
+                            <th class="text-end">UoM</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {% for p in products %}
                         <tr {% if is_filtered %}style="background-color: rgba(248, 113, 113, 0.05);"{% endif %}>
                             <td class="text-muted-custom">{{ p.sku }}</td>
                             <td class="fw-bold text-white">{{ p.name }}</td>
                             <td>{{ p.category_name }}</td>
+                            <td style="color: #6EE7B7;">${{ "{:,.2f}".format(p.cost_price) }}</td>
+                            <td style="color: #FDBA74;">${{ "{:,.2f}".format(p.sale_price) }}</td>
+                            
                             <td class="text-end">{{ p.unit_of_measure }}</td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="4" class="text-center text-muted py-4">No products found.</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted py-4">No products found.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
