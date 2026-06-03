@@ -5,11 +5,12 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, cast, Date
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_hackathon_key' 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///inventory.db'
+# Phase 1: Dynamic Database URI for Neon Postgres (Falls back to SQLite locally)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///inventory.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -26,7 +27,6 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default='Manager')
     address = db.Column(db.Text, nullable=True)
     preferred_payment = db.Column(db.String(20), nullable=True, default='UPI')
-    # OTP Recovery Columns
     reset_otp = db.Column(db.String(6), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
 
@@ -48,6 +48,9 @@ class Product(db.Model):
     sku = db.Column(db.String(100), unique=True, nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('product_categories.id'))
     unit_of_measure = db.Column(db.String(50), nullable=False)
+    # Phase 3: Added Financial Metrics
+    cost_price = db.Column(db.Float, nullable=False, default=0.0)
+    sale_price = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class InventoryOperation(db.Model):
@@ -159,7 +162,6 @@ def login():
             log_action(user.id, "System Login", f"Authenticated successfully via {email}")
             return redirect(url_for('dashboard'))
         else:
-            # PRG Fix: Redirect on failed login instead of falling through to render
             flash('Invalid email or password.', 'danger')
             return redirect(url_for('login'))
     return render_template('login.html')
@@ -171,43 +173,31 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- OTP RECOVERY ROUTES ---
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
         email = request.form.get('email')
         user = User.query.filter_by(email=email).first()
-        
         if user:
             otp = str(random.randint(100000, 999999))
             user.reset_otp = otp
             user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
             db.session.commit()
-            
-            print(f"\n========== 📧 SYSTEM EMAIL OUTBOX ==========")
-            print(f"To: {email}")
-            print(f"Subject: Password Reset Request")
-            print(f"Your secure OTP is: {otp}")
-            print(f"============================================\n")
-            
+            print(f"\n========== 📧 DEMO OTP: {otp} ==========\n")
             flash(f'Demo Mode: An OTP ({otp}) has been sent to your email.', 'info')
             session['reset_email'] = email
             return redirect(url_for('verify_otp'))
         else:
-            # PRG Fix: Redirect on failure 
             flash('If that email is registered, an OTP has been sent.', 'info')
             return redirect(url_for('forgot_password'))
-            
     return render_template('forgot_password.html')
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
 def verify_otp():
     if 'reset_email' not in session: return redirect(url_for('forgot_password'))
-        
     if request.method == 'POST':
         otp_entered = request.form.get('otp')
         user = User.query.filter_by(email=session['reset_email']).first()
-        
         if user and user.reset_otp == otp_entered:
             if datetime.utcnow() > user.otp_expiry:
                 flash('OTP has expired. Please request a new one.', 'danger')
@@ -215,21 +205,16 @@ def verify_otp():
             session['otp_verified'] = True
             return redirect(url_for('reset_password'))
         else:
-            # PRG Fix: Redirect on invalid OTP
             flash('Invalid OTP. Please check your email and try again.', 'danger')
             return redirect(url_for('verify_otp'))
-            
     return render_template('verify_otp.html')
 
 @app.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
-    if not session.get('otp_verified') or 'reset_email' not in session:
-        return redirect(url_for('login'))
-        
+    if not session.get('otp_verified') or 'reset_email' not in session: return redirect(url_for('login'))
     if request.method == 'POST':
         new_password = request.form.get('password')
         user = User.query.filter_by(email=session['reset_email']).first()
-        
         if user:
             user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
             user.reset_otp = None
@@ -241,13 +226,10 @@ def reset_password():
             flash('Password reset successfully! You can now log in.', 'success')
             return redirect(url_for('login'))
         else:
-            # PRG Fix: Catch edge case where user is not found during reset
             flash('An error occurred during password reset.', 'danger')
             return redirect(url_for('forgot_password'))
-            
     return render_template('reset_password.html')
 
-# --- MAIN APP ROUTES ---
 @app.route('/')
 def index():
     return redirect(url_for('dashboard'))
@@ -260,23 +242,52 @@ def dashboard():
     pending_deliveries = InventoryOperation.query.filter_by(document_type='Delivery').filter(InventoryOperation.status != 'Done').count()
     total_completed = InventoryOperation.query.filter_by(status='Done').count()
     
-    stock_levels = db.session.query(StockLedger.product_id, func.sum(StockLedger.quantity_change).label('total_stock')).group_by(StockLedger.product_id).all()
-    stock_dict = {item.product_id: item.total_stock for item in stock_levels}
-    all_products = Product.query.all()
-    
-    low_stock_items = []
-    for p in all_products:
-        qty = stock_dict.get(p.id, 0.0)
-        if qty <= 10:
-            low_stock_items.append({'product': p, 'qty': qty})
-            
+    # Phase 1: Optimized Low Stock Query (Offloads work to the database)
+    low_stock_query = db.session.query(
+        Product, 
+        func.sum(StockLedger.quantity_change).label('total_stock')
+    ).join(StockLedger, Product.id == StockLedger.product_id)\
+     .group_by(Product.id)\
+     .having(func.sum(StockLedger.quantity_change) <= 10).all()
+
+    low_stock_items = [{'product': item[0], 'qty': item[1]} for item in low_stock_query]
     low_stock_items.sort(key=lambda x: x['qty'])
     low_stock_count = len(low_stock_items)
+
+    # Phase 3: Total Asset Value Calculation (Database level)
+    total_asset_value = db.session.query(
+        func.sum(StockLedger.quantity_change * Product.cost_price)
+    ).join(Product, StockLedger.product_id == Product.id).scalar() or 0.0
 
     recent_ops = InventoryOperation.query.order_by(InventoryOperation.created_at.desc()).limit(8).all()
     loc_map = {loc.id: loc.name for loc in Location.query.all()}
 
-    return render_template('dashboard.html', total_products=total_products, pending_receipts=pending_receipts, pending_deliveries=pending_deliveries, total_completed=total_completed, low_stock=low_stock_count, low_stock_items=low_stock_items[:5], recent_ops=recent_ops, loc_map=loc_map)
+    # Phase 2: Visual Analytics (Last 7 Days)
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    daily_ops = db.session.query(
+        cast(InventoryOperation.created_at, Date).label('date'),
+        InventoryOperation.document_type,
+        func.count(InventoryOperation.id).label('count')
+    ).filter(InventoryOperation.created_at >= seven_days_ago)\
+     .group_by(cast(InventoryOperation.created_at, Date), InventoryOperation.document_type).all()
+
+    chart_labels = sorted(list(set([str(op.date) for op in daily_ops])))
+    chart_data_receipts = [next((op.count for op in daily_ops if str(op.date) == d and op.document_type == 'Receipt'), 0) for d in chart_labels]
+    chart_data_deliveries = [next((op.count for op in daily_ops if str(op.date) == d and op.document_type == 'Delivery'), 0) for d in chart_labels]
+
+    return render_template('dashboard.html', 
+                           total_products=total_products, 
+                           pending_receipts=pending_receipts, 
+                           pending_deliveries=pending_deliveries, 
+                           total_completed=total_completed, 
+                           low_stock=low_stock_count, 
+                           low_stock_items=low_stock_items[:5], 
+                           recent_ops=recent_ops, 
+                           loc_map=loc_map,
+                           total_asset_value=total_asset_value,
+                           chart_labels=chart_labels,
+                           chart_data_receipts=chart_data_receipts,
+                           chart_data_deliveries=chart_data_deliveries)
 
 @app.route('/products', methods=['GET', 'POST'])
 @login_required
@@ -287,14 +298,15 @@ def products():
         sku = request.form.get('sku')
         category_id = request.form.get('category_id')
         uom = request.form.get('uom')
+        cost_price = float(request.form.get('cost_price', 0.0))
+        sale_price = float(request.form.get('sale_price', 0.0))
         
-        # Check for duplicates
         existing_product = Product.query.filter((Product.sku == sku) | (func.lower(Product.name) == name.lower())).first()
         if existing_product:
             flash(f'Error: A product with the name "{name}" or SKU "{sku}" is already in the catalog!', 'danger')
             return redirect(url_for('products', duplicate_id=existing_product.id))
             
-        new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom)
+        new_product = Product(name=name, sku=sku, category_id=category_id, unit_of_measure=uom, cost_price=cost_price, sale_price=sale_price)
         db.session.add(new_product)
         db.session.commit()
         log_action(session['user_id'], "Product Created", f"Added '{name}' (SKU: {sku}) to catalog.")
@@ -302,9 +314,8 @@ def products():
         return redirect(url_for('products'))
         
     duplicate_id = request.args.get('duplicate_id')
-    base_query = db.session.query(Product.id, Product.name, Product.sku, Product.unit_of_measure, ProductCategory.name.label('category_name')).outerjoin(ProductCategory, Product.category_id == ProductCategory.id)
+    base_query = db.session.query(Product.id, Product.name, Product.sku, Product.unit_of_measure, Product.cost_price, Product.sale_price, ProductCategory.name.label('category_name')).outerjoin(ProductCategory, Product.category_id == ProductCategory.id)
     
-    # Filter the list if a duplicate ID was passed
     if duplicate_id:
         products_list = base_query.filter(Product.id == duplicate_id).all()
     else:
@@ -321,7 +332,6 @@ def locations():
         name = request.form.get('name')
         loc_type = request.form.get('type')
         
-        # Check for duplicates
         existing_loc = Location.query.filter(func.lower(Location.name) == name.lower()).first()
         if existing_loc:
             flash(f'Error: A location or partner named "{name}" is already registered!', 'danger')
@@ -335,8 +345,6 @@ def locations():
         return redirect(url_for('locations'))
     
     duplicate_id = request.args.get('duplicate_id')
-    
-    # Filter the list if a duplicate ID was passed
     if duplicate_id:
         locations_list = Location.query.filter_by(id=duplicate_id).all()
     else:
@@ -408,13 +416,9 @@ def internal_error(error):
 
 @app.errorhandler(Exception)
 def handle_unhandled_exception(e):
-    db.session.rollback() # Protects database from locking up
-    
-    # If a JS API call fails, send a clean JSON response
+    db.session.rollback() 
     if request.path.startswith('/api/'):
         return jsonify({"message": "A system error occurred. Please check your inputs."}), 500
-    
-    # If a standard page load fails, redirect cleanly with an alert
     flash("System Alert: An unexpected error was safely caught and resolved.", "danger")
     return redirect(url_for('dashboard'))
 
@@ -437,7 +441,8 @@ def seed_data():
         ProductCategory(name="Raw Materials")
     ])
     db.session.commit()
-    db.session.add(Product(name="Steel Rods", sku="SR-001", category_id=1, unit_of_measure="kg"))
+    # Updated seed to include financial data
+    db.session.add(Product(name="Steel Rods", sku="SR-001", category_id=1, unit_of_measure="kg", cost_price=2.50, sale_price=4.00))
     db.session.commit()
     return jsonify({"message": "Dummy data created!"}), 201
 
