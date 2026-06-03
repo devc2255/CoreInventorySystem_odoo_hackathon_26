@@ -42,7 +42,11 @@
         </div>
         <div>
             <h5 class="mb-1 fw-bold">Good morning, {{ session.get('user_name', 'User').split()[0] }}</h5>
-            <p class="mb-0" style="font-size: 0.9rem; color: #5B21B6;">{{ pending_receipts }} receipts to validate · {{ pending_deliveries }} deliveries pending · {{ low_stock }} low stock</p>
+            <p class="mb-0" style="font-size: 0.9rem; color: #5B21B6;">
+                {{ pending_receipts }} receipts to validate · {{ pending_deliveries }} deliveries pending · {{ low_stock }} low stock
+                <br>
+                <span class="fw-bold mt-1 d-inline-block" style="background: rgba(109, 40, 217, 0.1); padding: 2px 8px; border-radius: 6px;">Total Inventory Asset Value: ${{ "{:,.2f}".format(total_asset_value) }}</span>
+            </p>
         </div>
     </div>
     <div class="d-flex">
@@ -82,6 +86,15 @@
             <h2 class="mb-0 fw-bold" style="color: #FB923C;">{{ pending_deliveries }}</h2>
             <small class="text-white fw-semibold">Pending deliveries</small>
             <a href="/deliveries" class="kpi-link" style="color: #FB923C;">Manage <span>→</span></a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="panel-card">
+            <h6 class="text-white fw-bold mb-3">7-Day Operation Volume</h6>
+            <canvas id="inventoryChart" height="70"></canvas>
         </div>
     </div>
 </div>
@@ -147,11 +160,56 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     function filterOperations() {
         const filterVal = document.getElementById('opTypeFilter').value;
         const rows = document.querySelectorAll('.op-row');
         rows.forEach(row => { row.style.display = (filterVal === 'All' || row.dataset.type === filterVal) ? '' : 'none'; });
     }
+
+    // Chart.js Initialization
+    const ctx = document.getElementById('inventoryChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels | tojson }},
+            datasets: [{
+                label: 'Receipts',
+                data: {{ chart_data_receipts | tojson }},
+                borderColor: '#6EE7B7', 
+                backgroundColor: 'rgba(110, 231, 183, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true
+            }, {
+                label: 'Deliveries',
+                data: {{ chart_data_deliveries | tojson }},
+                borderColor: '#FDBA74',
+                backgroundColor: 'rgba(253, 186, 116, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { labels: { color: '#A1A1AA', font: { family: 'inherit' } } }
+            },
+            scales: {
+                y: { 
+                    beginAtZero: true, 
+                    ticks: { color: '#A1A1AA', stepSize: 1 }, 
+                    grid: { color: '#3F3F46' } 
+                },
+                x: { 
+                    ticks: { color: '#A1A1AA' }, 
+                    grid: { color: '#3F3F46' } 
+                }
+            }
+        }
+    });
 </script>
 {% endblock %}
