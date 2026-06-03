@@ -37,6 +37,8 @@ This repository provides a lightweight warehouse system with product pricing, re
 - Python 3.11+ recommended
 - `pip`
 
+![Live Deployment](https://core-inventory-system-rpi1.onrender.com)
+
 ## Installation
 
 1. Clone the repository:
@@ -69,11 +71,8 @@ python app.py
 
 Then open `http://localhost:5000` in your browser.
 
-## Live Demo
 
-If deployed, access the app using the live URL below:
 
-`https://core-inventory-system-rpi1.onrender.com`
 
 ## Seed Demo Data
 
