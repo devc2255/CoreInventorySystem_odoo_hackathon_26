@@ -37,7 +37,7 @@ This repository provides a lightweight warehouse system with product pricing, re
 - Python 3.11+ recommended
 - `pip`
 
-[Live Deployment](https://core-inventory-system-rpi1.onrender.com)
+[![Live Deployment](https://img.shields.io/badge/Status-Live_on_Render-success)](https://core-inventory-system-rpi1.onrender.com)
 
 
 [![Database](https://img.shields.io/badge/Database-Neon_PostgreSQL-316192)](https://neon.tech/)
