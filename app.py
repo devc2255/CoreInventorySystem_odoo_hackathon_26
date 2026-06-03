@@ -15,9 +15,14 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# Add these two lines right here!
+with app.app_context():
+    db.create_all()
+
 # ==========================================
 # MODELS 
 # ==========================================
+
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
