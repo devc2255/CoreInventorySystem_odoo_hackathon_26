@@ -497,3 +497,24 @@ def process_adjustment():
 if __name__ == '__main__':
     with app.app_context(): db.create_all()
     app.run(host='0.0.0.0', debug=True, port=5000)
+# ==========================================
+# GLOBAL ERROR HANDLING (UI PRESERVED)
+# ==========================================
+@app.errorhandler(404)
+def not_found_error(error):
+    flash("404 Error: The page you are looking for does not exist.", "warning")
+    return redirect(url_for('dashboard'))
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback() 
+    flash("500 Error: An internal server error occurred. Please try again later.", "danger")
+    return redirect(url_for('dashboard'))
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(e):
+    db.session.rollback() 
+    if request.path.startswith('/api/'):
+        return jsonify({"message": "A system error occurred. Please check your inputs."}), 500
+    flash("System Alert: An unexpected error was safely caught and resolved.", "danger")
+    return redirect(url_for('dashboard'))
