@@ -15,10 +15,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Add these two lines right here!
-with app.app_context():
-    db.create_all()
-
 # ==========================================
 # MODELS 
 # ==========================================
@@ -92,6 +88,10 @@ class AuditLog(db.Model):
     details = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='logs')
+
+# ---> CORRECT PLACEMENT: Building tables AFTER models are defined! <---
+with app.app_context():
+    db.create_all()
 
 # ==========================================
 # HELPERS & CONTEXT PROCESSORS
