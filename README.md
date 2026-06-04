@@ -78,13 +78,9 @@ Then open `http://localhost:5000` in your browser.
 
 ## Seed Demo Data
 
-Create sample users, products, categories, and locations with:
+Sample users, products, categories, and locations are automatically seeded on application startup.
 
-```bash
-curl -X POST http://localhost:5000/api/seed
-```
-
-Sample seeded credentials:
+Default seeded credentials:
 
 - Manager: `admin@test.com` / `password`
 - Warehouse Staff: `staff@test.com` / `password`
