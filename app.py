@@ -89,9 +89,52 @@ class AuditLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='logs')
 
-# ---> CORRECT PLACEMENT: Building tables AFTER models are defined! <---
+# ==========================================
+# AUTO-SEEDING & TABLE CREATION
+# ==========================================
 with app.app_context():
     db.create_all()
+    
+    # Auto-Seed Logic: If there are no users, inject the demo data instantly!
+    if not User.query.first():
+        print("Empty database detected. Auto-seeding demo data...")
+        
+        # 1. Create Users & Locations
+        admin = User(username="Admin Manager", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager")
+        staff = User(username="Warehouse Staff", email="staff@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Warehouse_Staff")
+        
+        vendor = Location(name="Steel Supplier Inc.", type="Vendor")
+        warehouse = Location(name="Main Warehouse", type="Internal")
+        customer = Location(name="Acme Manufacturing", type="Customer")
+        adj_loc = Location(name="Virtual Adjustment Log", type="Inventory Loss")
+        cat = ProductCategory(name="Raw Materials")
+        
+        db.session.add_all([admin, staff, vendor, warehouse, customer, adj_loc, cat])
+        db.session.flush() # Flush to get IDs
+        
+        # 2. Inject Products with Financial Valuation Data
+        p1 = Product(name="Steel Rods", sku="SR-001", category_id=cat.id, unit_of_measure="kg", cost_price=2.50, sale_price=4.00)
+        p2 = Product(name="Copper Wire", sku="SKU-014", category_id=cat.id, unit_of_measure="kg", cost_price=8.50, sale_price=12.00)
+        p3 = Product(name="Safety Gloves", sku="SKU-031", category_id=cat.id, unit_of_measure="pairs", cost_price=2.00, sale_price=4.50)
+        p4 = Product(name="PVC Pipe 2in", sku="SKU-022", category_id=cat.id, unit_of_measure="m", cost_price=1.20, sale_price=3.00)
+        db.session.add_all([p1, p2, p3, p4])
+        db.session.flush()
+
+        # 3. Inject a "Pending" Receipt
+        pending_rec = InventoryOperation(document_type='Receipt', status='Waiting', source_location_id=vendor.id, dest_location_id=warehouse.id, created_by=admin.id)
+        db.session.add(pending_rec)
+        db.session.flush()
+        db.session.add(OperationLine(operation_id=pending_rec.id, product_id=p2.id, quantity=150))
+
+        # 4. Inject an "Overdue" Delivery
+        overdue_del = InventoryOperation(document_type='Delivery', status='Overdue', source_location_id=warehouse.id, dest_location_id=customer.id, created_by=admin.id)
+        overdue_del.created_at = datetime.utcnow() - timedelta(days=2) # Backdate it
+        db.session.add(overdue_del)
+        db.session.flush()
+        db.session.add(OperationLine(operation_id=overdue_del.id, product_id=p3.id, quantity=25))
+
+        db.session.commit()
+        print("Demo data and Hackathon Pitch operations successfully injected!")
 
 # ==========================================
 # HELPERS & CONTEXT PROCESSORS
@@ -430,27 +473,6 @@ def handle_unhandled_exception(e):
 # ==========================================
 # API ENDPOINTS 
 # ==========================================
-@app.route('/api/seed', methods=['POST'])
-def seed_data():
-    if User.query.first(): return jsonify({"message": "Data exists!"}), 200
-    
-    admin = User(username="Admin Manager", email="admin@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Manager")
-    staff = User(username="Warehouse Staff", email="staff@test.com", password_hash=generate_password_hash("password", method='pbkdf2:sha256'), role="Warehouse_Staff")
-    
-    db.session.add_all([
-        admin, staff,
-        Location(name="Steel Supplier Inc.", type="Vendor"),
-        Location(name="Main Warehouse", type="Internal"),
-        Location(name="Acme Manufacturing", type="Customer"),
-        Location(name="Virtual Adjustment Log", type="Inventory Loss"),
-        ProductCategory(name="Raw Materials")
-    ])
-    db.session.commit()
-    # Updated seed to include financial data
-    db.session.add(Product(name="Steel Rods", sku="SR-001", category_id=1, unit_of_measure="kg", cost_price=2.50, sale_price=4.00))
-    db.session.commit()
-    return jsonify({"message": "Dummy data created!"}), 201
-
 @app.route('/api/receipts', methods=['POST'])
 def process_receipt():
     data = request.get_json()
@@ -495,5 +517,4 @@ def process_adjustment():
     return jsonify({"message": "Adjustment successful."}), 201
 
 if __name__ == '__main__':
-    with app.app_context(): db.create_all()
     app.run(host='0.0.0.0', debug=True, port=5000)
